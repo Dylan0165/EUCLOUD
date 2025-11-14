@@ -1,0 +1,15 @@
+# EUCLOUD
+uploads/
+thumbnails/
+*.db
+*.sqlite
+*.sqlite3
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Frontend
+node_modules/
+dist/
+.env.local

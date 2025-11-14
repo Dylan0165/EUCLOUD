@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eucloud-backend
+  namespace: eucloud
+  labels:
+    app: eucloud-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: eucloud-backend
+  template:
+    metadata:
+      labels:
+        app: eucloud-backend
+    spec:
+      containers:
+      - name: backend
+        image: ghcr.io/dylan0165/eucloud-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: FLASK_ENV
+          value: "production"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: eucloud-secrets
+              key: secret-key
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: eucloud-secrets
+              key: jwt-secret-key
+        volumeMounts:
+        - name: uploads
+          mountPath: /app/uploads
+        - name: thumbnails
+          mountPath: /app/thumbnails
+        - name: database
+          mountPath: /app/instance
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: eucloud-uploads-pvc
+      - name: thumbnails
+        emptyDir: {}
+      - name: database
+        persistentVolumeClaim:
+          claimName: eucloud-database-pvc
