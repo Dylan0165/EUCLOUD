@@ -22,7 +22,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: 3.11
     
     - name: Install dependencies
       working-directory: ./backend
@@ -53,9 +53,9 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: './frontend/package-lock.json'
+        node-version: 18
+        cache: npm
+        cache-dependency-path: ./frontend/package-lock.json
     
     - name: Install dependencies
       working-directory: ./frontend
@@ -149,7 +149,7 @@ jobs:
     
     - name: Deploy to Kubernetes
       run: |
-        echo "🚀 Deploying EUCLOUD to Kubernetes..."
+        echo "Deploying EUCLOUD to Kubernetes..."
         
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/secrets.yaml
@@ -159,16 +159,16 @@ jobs:
         kubectl apply -f k8s/services.yaml
         kubectl apply -f k8s/ingress.yaml
         
-        echo "⏳ Waiting for deployments to be ready..."
+        echo "Waiting for deployments to be ready..."
         kubectl rollout status deployment/eucloud-backend -n eucloud --timeout=300s
         kubectl rollout status deployment/eucloud-frontend -n eucloud --timeout=300s
         
-        echo "âœ… Deployment complete!"
+        echo "Deployment complete!"
     
     - name: Verify Deployment
       run: |
         echo ""
-        echo "ðŸ“Š Deployment Status:"
+        echo "Deployment Status:"
         echo ""
         echo "=== Pods ==="
         kubectl get pods -n eucloud -o wide
@@ -179,8 +179,7 @@ jobs:
         echo "=== Persistent Volume Claims ==="
         kubectl get pvc -n eucloud
         echo ""
-        echo "ðŸŽ‰ EUCLOUD deployed successfully!"
-        echo "ðŸ“ Frontend: http://192.168.124.50:30080"
-        echo "ðŸ“ Backend API: http://192.168.124.50:30500"
-        echo "ðŸ“ API Docs: http://192.168.124.50:30500/docs"
-
+        echo "EUCLOUD deployed successfully!"
+        echo "Frontend: http://192.168.124.50:30080"
+        echo "Backend API: http://192.168.124.50:30500"
+        echo "API Docs: http://192.168.124.50:30500/docs"
