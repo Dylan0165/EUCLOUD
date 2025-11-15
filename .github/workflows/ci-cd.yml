@@ -172,16 +172,9 @@ jobs:
         echo "== Services =="
         kubectl apply -f k8s/services.yaml
         
-        echo "== Restart deployments to pull latest images =="
-        kubectl rollout restart deployment/eucloud-backend -n eucloud
-        kubectl rollout restart deployment/eucloud-frontend -n eucloud
-        
-        echo "== Wait for rollout =="
-        kubectl rollout status deployment/eucloud-backend -n eucloud --timeout=5m
-        kubectl rollout status deployment/eucloud-frontend -n eucloud --timeout=5m
-        
-        echo "== Current status =="
+        echo "== Cluster status =="
         kubectl get pods -n eucloud
+        kubectl get pvc -n eucloud
         kubectl get svc -n eucloud
     
     - name: Verify deployment
