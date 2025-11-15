@@ -156,11 +156,13 @@ jobs:
       run: |
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+        chmod 600 $HOME/.kube/config
+        export KUBECONFIG=$HOME/.kube/config
+        kubectl cluster-info
     
     - name: Deploy to Kubernetes
-      env:
-        KUBECONFIG: $HOME/.kube/config
       run: |
+        export KUBECONFIG=$HOME/.kube/config
         kubectl apply -f k8s/namespace.yaml --validate=false
         kubectl apply -f k8s/pvc.yaml --validate=false
         kubectl apply -f k8s/secrets.yaml --validate=false
@@ -177,8 +179,7 @@ jobs:
         kubectl rollout status deployment/eucloud-frontend -n eucloud
     
     - name: Verify deployment
-      env:
-        KUBECONFIG: $HOME/.kube/config
       run: |
+        export KUBECONFIG=$HOME/.kube/config
         kubectl get pods -n eucloud
         kubectl get services -n eucloud

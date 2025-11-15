@@ -4,20 +4,21 @@ metadata:
   name: eucloud-ingress
   namespace: eucloud
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
 spec:
   ingressClassName: nginx
-  tls:
-  - hosts:
-    - eucloud.yourdomain.com
-    - api.eucloud.yourdomain.com
-    secretName: eucloud-tls
   rules:
-  - host: eucloud.yourdomain.com
+  - host: 192.168.124.50
     http:
       paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: eucloud-backend
+            port:
+              number: 5000
       - path: /
         pathType: Prefix
         backend:
@@ -25,13 +26,3 @@ spec:
             name: eucloud-frontend
             port:
               number: 80
-  - host: api.eucloud.yourdomain.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: eucloud-backend
-            port:
-              number: 5000

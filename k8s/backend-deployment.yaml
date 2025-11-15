@@ -25,6 +25,8 @@ spec:
         env:
         - name: FLASK_ENV
           value: "production"
+        - name: SERVER_IP
+          value: "192.168.124.50"
         - name: SECRET_KEY
           valueFrom:
             secretKeyRef:

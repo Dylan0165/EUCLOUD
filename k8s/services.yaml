@@ -24,6 +24,7 @@ metadata:
     app: eucloud-frontend
 spec:
   type: LoadBalancer
+  loadBalancerIP: 192.168.124.50
   ports:
   - port: 80
     targetPort: 80

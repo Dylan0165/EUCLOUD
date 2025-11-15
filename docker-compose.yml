@@ -6,11 +6,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "192.168.124.50:5000:5000"
     environment:
       - FLASK_ENV=development
       - SECRET_KEY=dev-secret-key
       - JWT_SECRET_KEY=jwt-secret-key
+      - SERVER_IP=192.168.124.50
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/instance:/app/instance
@@ -22,7 +23,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "192.168.124.50:80:80"
     depends_on:
       - backend
     networks:
