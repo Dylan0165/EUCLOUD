@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-      - develop
-  pull_request:
-    branches:
-      - main
 
 env:
   REGISTRY: ghcr.io
@@ -17,7 +13,7 @@ env:
 jobs:
   test-backend:
     name: Test Backend
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - name: Checkout code
@@ -48,7 +44,7 @@ jobs:
 
   test-frontend:
     name: Test Frontend
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - name: Checkout code
@@ -76,7 +72,7 @@ jobs:
   build-and-push:
     name: Build and Push Docker Images
     needs: [test-backend, test-frontend]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     permissions:
@@ -140,29 +136,18 @@ jobs:
   deploy:
     name: Deploy to Kubernetes
     needs: [build-and-push]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Set up kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'latest'
-    
-    - name: Configure kubectl
-      run: |
-        mkdir -p $HOME/.kube
-        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
-        chmod 600 $HOME/.kube/config
-        export KUBECONFIG=$HOME/.kube/config
-        kubectl cluster-info
-    
     - name: Deploy to Kubernetes
+      env:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
       run: |
-        export KUBECONFIG=$HOME/.kube/config
+        kubectl get nodes
         kubectl apply -f k8s/namespace.yaml --validate=false
         kubectl apply -f k8s/pvc.yaml --validate=false
         kubectl apply -f k8s/secrets.yaml --validate=false
@@ -179,7 +164,8 @@ jobs:
         kubectl rollout status deployment/eucloud-frontend -n eucloud
     
     - name: Verify deployment
+      env:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
       run: |
-        export KUBECONFIG=$HOME/.kube/config
         kubectl get pods -n eucloud
         kubectl get services -n eucloud
