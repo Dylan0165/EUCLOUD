@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// Use backend service URL directly (works inside Kubernetes cluster)
-const API_URL = import.meta.env.VITE_API_URL || 'http://eucloud-backend.eucloud.svc.cluster.local:5000'
+// Use relative path - nginx will proxy to backend service
+const API_URL = '/api'
 
 // Create axios instance
 const api = axios.create({
