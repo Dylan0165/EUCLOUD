@@ -10,7 +10,7 @@ folders_bp = Blueprint('folders', __name__, url_prefix='/api/folders')
 def create_folder():
     """Create a new folder"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         if not data or not data.get('folder_name'):
@@ -49,7 +49,7 @@ def create_folder():
 def list_folders():
     """List all folders"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         folders = Folder.query.filter_by(owner_id=user_id).all()
         
         return jsonify({
@@ -65,7 +65,7 @@ def list_folders():
 def get_folder(folder_id):
     """Get folder details"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         folder = Folder.query.get(folder_id)
         
         if not folder or folder.owner_id != user_id:
@@ -84,7 +84,7 @@ def get_folder(folder_id):
 def rename_folder(folder_id):
     """Rename a folder"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         if not data or not data.get('folder_name'):
@@ -114,7 +114,7 @@ def rename_folder(folder_id):
 def delete_folder(folder_id):
     """Delete a folder"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         folder = Folder.query.get(folder_id)
         
         if not folder or folder.owner_id != user_id:

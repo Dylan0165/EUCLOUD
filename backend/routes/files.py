@@ -43,7 +43,7 @@ def generate_thumbnail(file_path, thumbnail_path):
 def upload_file():
     """Upload a file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         user = User.query.get(user_id)
         
         if not user:
@@ -130,7 +130,7 @@ def upload_file():
 def list_files():
     """List files in a folder"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         folder_id = request.args.get('folder_id', type=int)
         
         # Build query
@@ -166,7 +166,7 @@ def list_files():
 def get_file(file_id):
     """Get file details"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:
@@ -183,7 +183,7 @@ def get_file(file_id):
 def download_file(file_id):
     """Download a file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:
@@ -205,7 +205,7 @@ def download_file(file_id):
 def rename_file(file_id):
     """Rename a file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         if not data or not data.get('filename'):
@@ -239,7 +239,7 @@ def rename_file(file_id):
 def delete_file(file_id):
     """Delete a file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:
@@ -270,7 +270,7 @@ def delete_file(file_id):
 def move_file(file_id):
     """Move file to another folder"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         file = File.query.get(file_id)
@@ -305,7 +305,7 @@ def move_file(file_id):
 def copy_file(file_id):
     """Copy a file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         file = File.query.get(file_id)
@@ -360,7 +360,7 @@ def copy_file(file_id):
 def preview_file(file_id):
     """Preview a file (for images, PDFs, text files)"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:

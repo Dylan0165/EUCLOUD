@@ -21,7 +21,7 @@ def log_activity(user_id, activity_type, file_id=None, folder_id=None, details=N
 def list_trash():
     """List deleted files"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         deleted_files = File.query.filter_by(
             owner_id=user_id,
             is_deleted=True
@@ -40,7 +40,7 @@ def list_trash():
 def restore_file(file_id):
     """Restore file from trash"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:
@@ -77,7 +77,7 @@ def restore_file(file_id):
 def permanent_delete(file_id):
     """Permanently delete file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:
@@ -116,7 +116,7 @@ def permanent_delete(file_id):
 def empty_trash():
     """Empty entire trash"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         deleted_files = File.query.filter_by(owner_id=user_id, is_deleted=True).all()
         
         import os
@@ -155,7 +155,7 @@ def empty_trash():
 def auto_delete_old():
     """Auto-delete files older than 30 days in trash"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         thirty_days_ago = datetime.utcnow() - timedelta(days=30)
         
         old_files = File.query.filter(

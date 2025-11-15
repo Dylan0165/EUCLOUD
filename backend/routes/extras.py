@@ -22,7 +22,7 @@ def log_activity(user_id, activity_type, file_id=None, folder_id=None, details=N
 def toggle_favorite(file_id):
     """Toggle favorite status"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:
@@ -54,7 +54,7 @@ def toggle_favorite(file_id):
 def list_favorites():
     """List favorite files"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         favorites = File.query.filter_by(
             owner_id=user_id,
             is_favorite=True,
@@ -75,7 +75,7 @@ def list_favorites():
 def create_tag():
     """Create a new tag"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         if not data or not data.get('tag_name'):
@@ -105,7 +105,7 @@ def create_tag():
 def list_tags():
     """List all tags"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         tags = Tag.query.filter_by(user_id=user_id).all()
         
         return jsonify({
@@ -121,7 +121,7 @@ def list_tags():
 def add_tag_to_file(file_id):
     """Add tag to file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         file = File.query.get(file_id)
@@ -158,7 +158,7 @@ def add_tag_to_file(file_id):
 def get_file_tags(file_id):
     """Get tags for a file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         file = File.query.get(file_id)
         
         if not file or file.owner_id != user_id:
@@ -182,7 +182,7 @@ def get_file_tags(file_id):
 def add_comment(file_id):
     """Add comment to file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         file = File.query.get(file_id)
@@ -232,7 +232,7 @@ def get_file_comments(file_id):
 def delete_comment(comment_id):
     """Delete a comment"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         comment = Comment.query.get(comment_id)
         
         if not comment or comment.user_id != user_id:
@@ -254,7 +254,7 @@ def delete_comment(comment_id):
 def list_activities():
     """List recent activities"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         limit = request.args.get('limit', 50, type=int)
         
         activities = Activity.query.filter_by(user_id=user_id).order_by(

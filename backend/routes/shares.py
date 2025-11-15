@@ -11,7 +11,7 @@ shares_bp = Blueprint('shares', __name__, url_prefix='/api/share')
 def create_share():
     """Create a share link for a file"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         data = request.get_json()
         
         if not data or not data.get('file_id'):
@@ -93,7 +93,7 @@ def get_share(share_id):
 def delete_share(share_id):
     """Delete a share"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         share = Share.query.get(share_id)
         
         if not share or share.created_by != user_id:

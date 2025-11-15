@@ -10,7 +10,7 @@ storage_bp = Blueprint('storage', __name__, url_prefix='/api/storage')
 def get_storage_usage():
     """Get current user storage usage"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         user = User.query.get(user_id)
         
         if not user:
@@ -32,7 +32,7 @@ def get_storage_usage():
 def get_storage_stats():
     """Get detailed storage statistics"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string to int
         
         # Get file count by type
         stats = db.session.query(

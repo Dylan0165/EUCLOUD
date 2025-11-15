@@ -25,8 +25,8 @@ def register():
         db.session.add(user)
         db.session.commit()
         
-        # Create access token
-        access_token = create_access_token(identity=user.user_id)
+        # Create access token - identity must be string for Flask-JWT-Extended
+        access_token = create_access_token(identity=str(user.user_id))
         
         return jsonify({
             'message': 'User registered successfully',
@@ -54,8 +54,8 @@ def login():
         if not user or not user.check_password(data['password']):
             return jsonify({'error': 'Invalid email or password'}), 401
         
-        # Create access token
-        access_token = create_access_token(identity=user.user_id)
+        # Create access token - identity must be string for Flask-JWT-Extended
+        access_token = create_access_token(identity=str(user.user_id))
         
         return jsonify({
             'message': 'Login successful',
@@ -79,7 +79,7 @@ def logout():
 def get_current_user():
     """Get current user info"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string back to int
         user = User.query.get(user_id)
         
         if not user:
