@@ -157,7 +157,6 @@ jobs:
         kubectl apply -f k8s/backend-deployment.yaml
         kubectl apply -f k8s/frontend-deployment.yaml
         kubectl apply -f k8s/services.yaml
-        kubectl apply -f k8s/ingress.yaml
         
         echo "Waiting for deployments to be ready..."
         kubectl rollout status deployment/eucloud-backend -n eucloud --timeout=300s
