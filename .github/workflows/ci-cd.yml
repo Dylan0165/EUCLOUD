@@ -151,109 +151,62 @@ jobs:
       env:
         KUBE_TOKEN: ${{ secrets.KUBE_TOKEN }}
         KUBE_SERVER: ${{ secrets.KUBE_SERVER }}
-        KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
       run: |
         echo "🔧 Configuring kubectl with token authentication..."
         
-        # Configure kubectl with token
+        # Configure kubectl cluster
         kubectl config set-cluster k3s \
           --server=$KUBE_SERVER \
           --insecure-skip-tls-verify=true
         
+        # Configure credentials
         kubectl config set-credentials github-deployer \
           --token=$KUBE_TOKEN
         
-        kubectl config set-context k3s \
+        # Configure context for eucloud namespace
+        kubectl config set-context eucloud-context \
           --cluster=k3s \
           --user=github-deployer \
-          --namespace=$KUBE_NAMESPACE
+          --namespace=eucloud
         
-        kubectl config use-context k3s
+        # Use the context
+        kubectl config use-context eucloud-context
         
         echo "✅ kubectl configured successfully"
-    
-    - name: Setup VM Storage
-      run: |
-        echo "📁 Setting up persistent storage on VM..."
-        sudo mkdir -p /var/eucloud/{database,uploads,thumbnails}
-        sudo chown -R 1000:1000 /var/eucloud/
-        sudo chmod -R 755 /var/eucloud/
-        echo "✅ VM storage directories ready"
+        echo "� Testing connection..."
+        kubectl cluster-info
     
     - name: Deploy to Kubernetes
-      env:
-        KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
       run: |
         echo "🚀 Deploying EUCLOUD to Kubernetes..."
         
-        # Apply namespace first
-        kubectl apply -f k8s/namespace.yaml
-        
-        # Apply secrets
-        kubectl apply -f k8s/secrets.yaml
-        
-        # Check for existing PVCs and handle migration
-        if kubectl get pvc eucloud-database-pvc -n $KUBE_NAMESPACE 2>/dev/null | grep -q "local-path"; then
-          echo "⚠️  Detected old local-path storage - migrating..."
-          
-          # Scale down deployments
-          kubectl scale deployment eucloud-backend -n $KUBE_NAMESPACE --replicas=0 --timeout=60s 2>/dev/null || true
-          kubectl scale deployment eucloud-frontend -n $KUBE_NAMESPACE --replicas=0 --timeout=60s 2>/dev/null || true
-          sleep 5
-          
-          # Delete old PVCs
-          kubectl delete pvc eucloud-database-pvc eucloud-uploads-pvc -n $KUBE_NAMESPACE --ignore-not-found=true --wait=true --timeout=60s
-          kubectl delete pvc eucloud-thumbnails-pvc -n $KUBE_NAMESPACE --ignore-not-found=true --wait=false 2>/dev/null || true
-          
-          # Clean up orphaned PVs
-          kubectl get pv | grep "eucloud" | grep "Released\|Available" | awk '{print $1}' | xargs -r kubectl delete pv 2>/dev/null || true
-          
-          sleep 3
-          echo "✅ Old storage cleaned up"
-        fi
-        
-        # Apply persistent volumes and claims
-        kubectl apply -f k8s/pvc.yaml
-        echo "⏳ Waiting for PVs to bind..."
-        sleep 5
-        
-        # Deploy backend and frontend
-        kubectl apply -f k8s/backend-deployment.yaml
-        kubectl apply -f k8s/frontend-deployment.yaml
-        
-        # Apply services
-        kubectl apply -f k8s/services.yaml
-        
-        # Apply ingress if exists
-        kubectl apply -f k8s/ingress.yaml 2>/dev/null || echo "No ingress configuration found"
+        # Apply all Kubernetes configurations
+        kubectl apply -f k8s/
         
         echo "⏳ Waiting for deployments to be ready..."
-        kubectl rollout status deployment/eucloud-backend -n $KUBE_NAMESPACE --timeout=300s
-        kubectl rollout status deployment/eucloud-frontend -n $KUBE_NAMESPACE --timeout=300s
+        kubectl rollout status deployment/eucloud-backend --timeout=300s
+        kubectl rollout status deployment/eucloud-frontend --timeout=300s
         
         echo "✅ Deployment complete!"
     
     - name: Verify Deployment
-      env:
-        KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
       run: |
         echo ""
         echo "📊 Deployment Status:"
         echo ""
         echo "=== Pods ==="
-        kubectl get pods -n $KUBE_NAMESPACE -o wide
+        kubectl get pods -o wide
         echo ""
         echo "=== Services ==="
-        kubectl get services -n $KUBE_NAMESPACE
+        kubectl get services
         echo ""
         echo "=== Persistent Volumes ==="
         kubectl get pv | grep eucloud || echo "No PVs found"
         echo ""
         echo "=== Persistent Volume Claims ==="
-        kubectl get pvc -n $KUBE_NAMESPACE
-        echo ""
-        echo "💾 Storage on VM:"
-        sudo du -sh /var/eucloud/* 2>/dev/null || echo "Empty (new installation)"
+        kubectl get pvc
         echo ""
         echo "🎉 EUCLOUD deployed successfully!"
-        echo "📍 Access your application at the configured NodePort/Ingress"
+        echo "📍 Frontend: http://192.168.124.50:30080"
+        echo "📍 Backend API: http://192.168.124.50:30500"
+        echo "📍 API Docs: http://192.168.124.50:30500/docs"
