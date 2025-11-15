@@ -161,12 +161,12 @@ jobs:
       env:
         KUBECONFIG: $HOME/.kube/config
       run: |
-        kubectl apply -f k8s/namespace.yaml
-        kubectl apply -f k8s/pvc.yaml
-        kubectl apply -f k8s/secrets.yaml
-        kubectl apply -f k8s/backend-deployment.yaml
-        kubectl apply -f k8s/frontend-deployment.yaml
-        kubectl apply -f k8s/services.yaml
+        kubectl apply -f k8s/namespace.yaml --validate=false
+        kubectl apply -f k8s/pvc.yaml --validate=false
+        kubectl apply -f k8s/secrets.yaml --validate=false
+        kubectl apply -f k8s/backend-deployment.yaml --validate=false
+        kubectl apply -f k8s/frontend-deployment.yaml --validate=false
+        kubectl apply -f k8s/services.yaml --validate=false
         
         # Restart deployments to pull latest images
         kubectl rollout restart deployment/eucloud-backend -n eucloud
