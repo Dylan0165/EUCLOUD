@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+﻿name: CI/CD Pipeline
 
 on:
   push:
@@ -147,66 +147,40 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Configure kubectl
-      env:
-        KUBE_TOKEN: ${{ secrets.KUBE_TOKEN }}
-        KUBE_SERVER: ${{ secrets.KUBE_SERVER }}
-      run: |
-        echo "🔧 Configuring kubectl with token authentication..."
-        
-        # Configure kubectl cluster
-        kubectl config set-cluster k3s \
-          --server=$KUBE_SERVER \
-          --insecure-skip-tls-verify=true
-        
-        # Configure credentials
-        kubectl config set-credentials github-deployer \
-          --token=$KUBE_TOKEN
-        
-        # Configure context for eucloud namespace
-        kubectl config set-context eucloud-context \
-          --cluster=k3s \
-          --user=github-deployer \
-          --namespace=eucloud
-        
-        # Use the context
-        kubectl config use-context eucloud-context
-        
-        echo "✅ kubectl configured successfully"
-        echo "� Testing connection..."
-        kubectl cluster-info
-    
     - name: Deploy to Kubernetes
       run: |
         echo "🚀 Deploying EUCLOUD to Kubernetes..."
         
-        # Apply all Kubernetes configurations
-        kubectl apply -f k8s/
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/secrets.yaml
+        kubectl apply -f k8s/pvc.yaml
+        kubectl apply -f k8s/backend-deployment.yaml
+        kubectl apply -f k8s/frontend-deployment.yaml
+        kubectl apply -f k8s/services.yaml
+        kubectl apply -f k8s/ingress.yaml
         
         echo "⏳ Waiting for deployments to be ready..."
-        kubectl rollout status deployment/eucloud-backend --timeout=300s
-        kubectl rollout status deployment/eucloud-frontend --timeout=300s
+        kubectl rollout status deployment/eucloud-backend -n eucloud --timeout=300s
+        kubectl rollout status deployment/eucloud-frontend -n eucloud --timeout=300s
         
-        echo "✅ Deployment complete!"
+        echo "âœ… Deployment complete!"
     
     - name: Verify Deployment
       run: |
         echo ""
-        echo "📊 Deployment Status:"
+        echo "ðŸ“Š Deployment Status:"
         echo ""
         echo "=== Pods ==="
-        kubectl get pods -o wide
+        kubectl get pods -n eucloud -o wide
         echo ""
         echo "=== Services ==="
-        kubectl get services
-        echo ""
-        echo "=== Persistent Volumes ==="
-        kubectl get pv | grep eucloud || echo "No PVs found"
+        kubectl get services -n eucloud
         echo ""
         echo "=== Persistent Volume Claims ==="
-        kubectl get pvc
+        kubectl get pvc -n eucloud
         echo ""
-        echo "🎉 EUCLOUD deployed successfully!"
-        echo "📍 Frontend: http://192.168.124.50:30080"
-        echo "📍 Backend API: http://192.168.124.50:30500"
-        echo "📍 API Docs: http://192.168.124.50:30500/docs"
+        echo "ðŸŽ‰ EUCLOUD deployed successfully!"
+        echo "ðŸ“ Frontend: http://192.168.124.50:30080"
+        echo "ðŸ“ Backend API: http://192.168.124.50:30500"
+        echo "ðŸ“ API Docs: http://192.168.124.50:30500/docs"
+
