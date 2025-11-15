@@ -68,7 +68,8 @@ spec:
         persistentVolumeClaim:
           claimName: eucloud-uploads-pvc
       - name: thumbnails
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: eucloud-thumbnails-pvc
       - name: database
         persistentVolumeClaim:
           claimName: eucloud-database-pvc

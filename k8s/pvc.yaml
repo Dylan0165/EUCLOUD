@@ -1,3 +1,21 @@
+---
+# Persistent Volume for Database (mounted to VM)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: eucloud-database-pv
+  namespace: eucloud
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /var/eucloud/database
+    type: DirectoryOrCreate
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -9,7 +27,25 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: local-path
+  storageClassName: manual
+  volumeName: eucloud-database-pv
+---
+# Persistent Volume for Uploads (mounted to VM)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: eucloud-uploads-pv
+  namespace: eucloud
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /var/eucloud/uploads
+    type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -21,6 +57,39 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
-  storageClassName: local-path
+      storage: 50Gi
+  storageClassName: manual
+  volumeName: eucloud-uploads-pv
+---
+# Persistent Volume for Thumbnails (mounted to VM)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: eucloud-thumbnails-pv
+  namespace: eucloud
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /var/eucloud/thumbnails
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: eucloud-thumbnails-pvc
+  namespace: eucloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: manual
+  volumeName: eucloud-thumbnails-pv
+
 

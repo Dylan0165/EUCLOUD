@@ -21,8 +21,15 @@ export const authService = {
 
   // Logout
   logout: async () => {
-    await api.post('/auth/logout')
-    localStorage.removeItem('token')
+    try {
+      await api.post('/auth/logout')
+    } catch (error) {
+      console.error('Logout API call failed:', error)
+    } finally {
+      // Always remove token and redirect, even if API call fails
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
   },
 
   // Get current user

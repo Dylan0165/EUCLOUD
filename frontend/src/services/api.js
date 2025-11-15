@@ -14,17 +14,15 @@ api.interceptors.request.use(
     const token = localStorage.getItem('token')
     
     if (token) {
-      // Ensure headers object exists
-      if (!config.headers) {
-        config.headers = {}
-      }
-      // Add Authorization header with Bearer token
-      config.headers.Authorization = `Bearer ${token}`
+      // Set Authorization header with Bearer token
+      config.headers = config.headers || {}
+      config.headers['Authorization'] = `Bearer ${token}`
     }
     
-    // Only set default content type for non-FormData requests
-    if (!config.headers['Content-Type'] && !(config.data instanceof FormData)) {
-      config.headers['Content-Type'] = 'application/json'
+    // Set default content type for non-FormData requests
+    // For FormData, browser will set multipart/form-data with boundary automatically
+    if (config.data && !(config.data instanceof FormData)) {
+      config.headers['Content-Type'] = config.headers['Content-Type'] || 'application/json'
     }
     
     return config
