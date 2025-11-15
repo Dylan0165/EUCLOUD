@@ -29,7 +29,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Handle both 401 Unauthorized and 422 "Subject must be a string" errors
+    if (error.response?.status === 401 || 
+        (error.response?.status === 422 && error.response?.data?.msg?.includes('Subject must be a string'))) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
