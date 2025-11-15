@@ -151,30 +151,30 @@ jobs:
       env:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
       run: |
+        set -e
+        
+        echo "== Cluster nodes =="
         kubectl get nodes
         
-        # Namespace altijd eerst
+        echo "== Namespace =="
         kubectl apply -f k8s/namespace.yaml
         
-        # Oude uploads-PVC weggooien als hij bestaat (anders negeren)
-        kubectl delete pvc eucloud-uploads-pvc -n eucloud --ignore-not-found=true
-        
-        # PVC's opnieuw aanmaken met correcte spec
+        echo "== PersistentVolumeClaims =="
         kubectl apply -f k8s/pvc.yaml
         
-        # Secrets, deployments en services
+        echo "== Secrets =="
         kubectl apply -f k8s/secrets.yaml
+        
+        echo "== Deployments =="
         kubectl apply -f k8s/backend-deployment.yaml
         kubectl apply -f k8s/frontend-deployment.yaml
+        
+        echo "== Services =="
         kubectl apply -f k8s/services.yaml
         
-        # Restart deployments to pull latest images
-        kubectl rollout restart deployment/eucloud-backend -n eucloud
-        kubectl rollout restart deployment/eucloud-frontend -n eucloud
-        
-        # Wait for rollout to complete
-        kubectl rollout status deployment/eucloud-backend -n eucloud
-        kubectl rollout status deployment/eucloud-frontend -n eucloud
+        echo "== Current status =="
+        kubectl get pods -n eucloud
+        kubectl get svc -n eucloud
     
     - name: Verify deployment
       env:
