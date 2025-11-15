@@ -152,8 +152,17 @@ jobs:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
       run: |
         kubectl get nodes
+        
+        # Namespace altijd eerst
         kubectl apply -f k8s/namespace.yaml
+        
+        # Oude uploads-PVC weggooien als hij bestaat (anders negeren)
+        kubectl delete pvc eucloud-uploads-pvc -n eucloud --ignore-not-found=true
+        
+        # PVC's opnieuw aanmaken met correcte spec
         kubectl apply -f k8s/pvc.yaml
+        
+        # Secrets, deployments en services
         kubectl apply -f k8s/secrets.yaml
         kubectl apply -f k8s/backend-deployment.yaml
         kubectl apply -f k8s/frontend-deployment.yaml
