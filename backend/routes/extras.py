@@ -1,12 +1,15 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, File, Tag, FileTag, Comment, Activity
+﻿from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
 from datetime import datetime
 
-extras_bp = Blueprint('extras', __name__, url_prefix='/api')
+from models import get_db, File, Tag, FileTag, Comment, Activity, User
+from auth import get_current_user
 
-def log_activity(user_id, activity_type, file_id=None, folder_id=None, details=None):
-    """Helper function to log activities"""
+router = APIRouter()
+
+def log_activity(db: Session, user_id: int, activity_type: str, file_id: Optional[int] = None, folder_id: Optional[int] = None, details: Optional[str] = None):
     activity = Activity(
         user_id=user_id,
         file_id=file_id,
@@ -14,256 +17,241 @@ def log_activity(user_id, activity_type, file_id=None, folder_id=None, details=N
         activity_type=activity_type,
         activity_details=details
     )
-    db.session.add(activity)
+    db.add(activity)
 
-# FAVORITES
-@extras_bp.route('/favorites/toggle/<int:file_id>', methods=['POST'])
-@jwt_required()
-def toggle_favorite(file_id):
-    """Toggle favorite status"""
+@router.post("/favorites/toggle/{file_id}")
+async def toggle_favorite(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file.is_favorite = not file.is_favorite
+    
+    log_activity(
+        db,
+        current_user.user_id,
+        "favorite" if file.is_favorite else "unfavorite",
+        file_id=file_id,
+        details=f"{'Favorited' if file.is_favorite else 'Unfavorited'} {file.filename}"
+    )
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        file = File.query.get(file_id)
+        db.commit()
         
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        file.is_favorite = not file.is_favorite
-        
-        log_activity(
-            user_id, 
-            'favorite' if file.is_favorite else 'unfavorite',
-            file_id=file_id,
-            details=f'{"Favorited" if file.is_favorite else "Unfavorited"} {file.filename}'
-        )
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Favorite toggled',
-            'is_favorite': file.is_favorite
-        }), 200
-        
+        return {
+            "message": "Favorite toggled",
+            "is_favorite": file.is_favorite
+        }
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/favorites/list")
+async def list_favorites(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    favorites = db.query(File).filter_by(
+        owner_id=current_user.user_id,
+        is_favorite=True,
+        is_deleted=False
+    ).all()
+    
+    return {
+        "files": [f.to_dict() for f in favorites]
+    }
 
-@extras_bp.route('/favorites/list', methods=['GET'])
-@jwt_required()
-def list_favorites():
-    """List favorite files"""
+class TagCreate(BaseModel):
+    tag_name: str
+    color: Optional[str] = None
+
+@router.post("/tags/create", status_code=status.HTTP_201_CREATED)
+async def create_tag(
+    tag_data: TagCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(Tag).filter_by(
+        tag_name=tag_data.tag_name,
+        owner_id=current_user.user_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Tag already exists")
+    
+    tag = Tag(
+        tag_name=tag_data.tag_name,
+        color=tag_data.color,
+        owner_id=current_user.user_id
+    )
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        favorites = File.query.filter_by(
-            owner_id=user_id,
-            is_favorite=True,
-            is_deleted=False
-        ).all()
+        db.add(tag)
+        db.commit()
+        db.refresh(tag)
         
-        return jsonify({
-            'files': [f.to_dict() for f in favorites]
-        }), 200
-        
+        return {
+            "message": "Tag created successfully",
+            "tag": tag.to_dict()
+        }
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/tags/list")
+async def list_tags(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    tags = db.query(Tag).filter_by(owner_id=current_user.user_id).all()
+    
+    return {
+        "tags": [t.to_dict() for t in tags]
+    }
 
-# TAGS
-@extras_bp.route('/tags/create', methods=['POST'])
-@jwt_required()
-def create_tag():
-    """Create a new tag"""
+@router.post("/tags/add/{file_id}/{tag_id}")
+async def add_tag_to_file(
+    file_id: int,
+    tag_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    tag = db.query(Tag).get(tag_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if not tag or tag.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    
+    existing = db.query(FileTag).filter_by(file_id=file_id, tag_id=tag_id).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Tag already added to file")
+    
+    file_tag = FileTag(file_id=file_id, tag_id=tag_id)
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
+        db.add(file_tag)
+        db.commit()
         
-        if not data or not data.get('tag_name'):
-            return jsonify({'error': 'Tag name is required'}), 400
-        
-        tag = Tag(
-            tag_name=data['tag_name'],
-            color=data.get('color', '#667eea'),
-            user_id=user_id
-        )
-        
-        db.session.add(tag)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Tag created',
-            'tag': tag.to_dict()
-        }), 201
-        
+        return {"message": "Tag added to file"}
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@extras_bp.route('/tags/list', methods=['GET'])
-@jwt_required()
-def list_tags():
-    """List all tags"""
+@router.delete("/tags/remove/{file_id}/{tag_id}")
+async def remove_tag_from_file(
+    file_id: int,
+    tag_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file_tag = db.query(FileTag).filter_by(file_id=file_id, tag_id=tag_id).first()
+    
+    if not file_tag:
+        raise HTTPException(status_code=404, detail="Tag not found on file")
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        tags = Tag.query.filter_by(user_id=user_id).all()
+        db.delete(file_tag)
+        db.commit()
         
-        return jsonify({
-            'tags': [t.to_dict() for t in tags]
-        }), 200
-        
+        return {"message": "Tag removed from file"}
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
+class CommentCreate(BaseModel):
+    comment_text: str
 
-@extras_bp.route('/tags/add-to-file/<int:file_id>', methods=['POST'])
-@jwt_required()
-def add_tag_to_file(file_id):
-    """Add tag to file"""
+@router.post("/comments/{file_id}", status_code=status.HTTP_201_CREATED)
+async def add_comment(
+    file_id: int,
+    comment_data: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    comment = Comment(
+        file_id=file_id,
+        user_id=current_user.user_id,
+        comment_text=comment_data.comment_text
+    )
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
+        db.add(comment)
+        db.commit()
+        db.refresh(comment)
         
-        file = File.query.get(file_id)
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        tag_id = data.get('tag_id')
-        tag = Tag.query.get(tag_id)
-        
-        if not tag or tag.user_id != user_id:
-            return jsonify({'error': 'Tag not found'}), 404
-        
-        # Check if already tagged
-        existing = FileTag.query.filter_by(file_id=file_id, tag_id=tag_id).first()
-        if existing:
-            return jsonify({'error': 'File already has this tag'}), 400
-        
-        file_tag = FileTag(file_id=file_id, tag_id=tag_id)
-        db.session.add(file_tag)
-        
-        log_activity(user_id, 'tag', file_id=file_id, details=f'Tagged {file.filename} with {tag.tag_name}')
-        
-        db.session.commit()
-        
-        return jsonify({'message': 'Tag added to file'}), 200
-        
+        return {
+            "message": "Comment added",
+            "comment": comment.to_dict()
+        }
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/comments/{file_id}")
+async def get_comments(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    comments = db.query(Comment).filter_by(file_id=file_id).order_by(Comment.created_at.desc()).all()
+    
+    return {
+        "comments": [c.to_dict() for c in comments]
+    }
 
-@extras_bp.route('/tags/file/<int:file_id>', methods=['GET'])
-@jwt_required()
-def get_file_tags(file_id):
-    """Get tags for a file"""
+@router.delete("/comments/{comment_id}")
+async def delete_comment(
+    comment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    comment = db.query(Comment).get(comment_id)
+    
+    if not comment or comment.user_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        file = File.query.get(file_id)
+        db.delete(comment)
+        db.commit()
         
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        file_tags = db.session.query(Tag).join(FileTag).filter(
-            FileTag.file_id == file_id
-        ).all()
-        
-        return jsonify({
-            'tags': [t.to_dict() for t in file_tags]
-        }), 200
-        
+        return {"message": "Comment deleted"}
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-# COMMENTS
-@extras_bp.route('/comments/add/<int:file_id>', methods=['POST'])
-@jwt_required()
-def add_comment(file_id):
-    """Add comment to file"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
-        
-        file = File.query.get(file_id)
-        if not file:
-            return jsonify({'error': 'File not found'}), 404
-        
-        comment = Comment(
-            file_id=file_id,
-            user_id=user_id,
-            comment_text=data.get('comment_text'),
-            parent_comment_id=data.get('parent_comment_id')
-        )
-        
-        db.session.add(comment)
-        
-        log_activity(user_id, 'comment', file_id=file_id, details=f'Commented on {file.filename}')
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Comment added',
-            'comment': comment.to_dict()
-        }), 201
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
-@extras_bp.route('/comments/file/<int:file_id>', methods=['GET'])
-@jwt_required()
-def get_file_comments(file_id):
-    """Get comments for a file"""
-    try:
-        comments = Comment.query.filter_by(file_id=file_id).order_by(Comment.created_at.desc()).all()
-        
-        return jsonify({
-            'comments': [c.to_dict() for c in comments]
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@extras_bp.route('/comments/<int:comment_id>', methods=['DELETE'])
-@jwt_required()
-def delete_comment(comment_id):
-    """Delete a comment"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        comment = Comment.query.get(comment_id)
-        
-        if not comment or comment.user_id != user_id:
-            return jsonify({'error': 'Comment not found'}), 404
-        
-        db.session.delete(comment)
-        db.session.commit()
-        
-        return jsonify({'message': 'Comment deleted'}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
-# ACTIVITIES
-@extras_bp.route('/activities/list', methods=['GET'])
-@jwt_required()
-def list_activities():
-    """List recent activities"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        limit = request.args.get('limit', 50, type=int)
-        
-        activities = Activity.query.filter_by(user_id=user_id).order_by(
-            Activity.created_at.desc()
-        ).limit(limit).all()
-        
-        return jsonify({
-            'activities': [a.to_dict() for a in activities]
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@router.get("/activity")
+async def get_activity(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    activities = db.query(Activity).filter_by(
+        user_id=current_user.user_id
+    ).order_by(Activity.created_at.desc()).limit(50).all()
+    
+    return {
+        "activities": [a.to_dict() for a in activities]
+    }

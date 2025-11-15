@@ -1,109 +1,106 @@
-import uuid
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Share, File, User
+﻿import uuid
 from datetime import datetime, timedelta
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
-shares_bp = Blueprint('shares', __name__, url_prefix='/api/share')
+from models import get_db, Share, File, User
+from auth import get_current_user
 
-@shares_bp.route('/create', methods=['POST'])
-@jwt_required()
-def create_share():
-    """Create a share link for a file"""
+router = APIRouter()
+
+class ShareCreate(BaseModel):
+    file_id: int
+    access_type: str = "view"
+    expires_in_days: Optional[int] = None
+    password: Optional[str] = None
+
+@router.post("/create", status_code=status.HTTP_201_CREATED)
+async def create_share(
+    share_data: ShareCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(share_data.file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    share_id = str(uuid.uuid4())[:12]
+    
+    expires_at = None
+    if share_data.expires_in_days:
+        expires_at = datetime.utcnow() + timedelta(days=share_data.expires_in_days)
+    
+    share = Share(
+        share_id=share_id,
+        file_id=file.file_id,
+        created_by=current_user.user_id,
+        access_type=share_data.access_type,
+        expires_at=expires_at
+    )
+    
+    if share_data.password:
+        share.set_password(share_data.password)
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
+        db.add(share)
+        db.commit()
+        db.refresh(share)
         
-        if not data or not data.get('file_id'):
-            return jsonify({'error': 'File ID is required'}), 400
-        
-        file = File.query.get(data['file_id'])
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        # Generate unique share ID
-        share_id = str(uuid.uuid4())[:12]
-        
-        # Calculate expiration
-        expires_at = None
-        if data.get('expires_in_days'):
-            expires_at = datetime.utcnow() + timedelta(days=data['expires_in_days'])
-        
-        # Create share
-        share = Share(
-            share_id=share_id,
-            file_id=file.file_id,
-            created_by=user_id,
-            access_type=data.get('access_type', 'view'),
-            expires_at=expires_at
-        )
-        
-        # Set password if provided
-        if data.get('password'):
-            share.set_password(data['password'])
-        
-        db.session.add(share)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Share created successfully',
-            'share': share.to_dict(),
-            'share_url': f'/share/{share_id}'
-        }), 201
-        
+        return {
+            "message": "Share created successfully",
+            "share": share.to_dict(),
+            "share_url": f"/share/{share_id}"
+        }
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/{share_id}")
+async def get_share(
+    share_id: str,
+    password: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    share = db.query(Share).get(share_id)
+    
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    
+    if share.is_expired():
+        raise HTTPException(status_code=410, detail="Share has expired")
+    
+    if share.password_hash and not share.check_password(password):
+        return {
+            "error": "Password required",
+            "requires_password": True
+        }
+    
+    file = db.query(File).get(share.file_id)
+    
+    return {
+        "share": share.to_dict(),
+        "file": file.to_dict()
+    }
 
-@shares_bp.route('/<share_id>', methods=['GET'])
-def get_share(share_id):
-    """Get share details and file (public endpoint)"""
+@router.delete("/{share_id}")
+async def delete_share(
+    share_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    share = db.query(Share).get(share_id)
+    
+    if not share or share.created_by != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Share not found")
+    
     try:
-        share = Share.query.get(share_id)
+        db.delete(share)
+        db.commit()
         
-        if not share:
-            return jsonify({'error': 'Share not found'}), 404
-        
-        if share.is_expired():
-            return jsonify({'error': 'Share has expired'}), 410
-        
-        # Check password
-        password = request.args.get('password')
-        if share.password_hash and not share.check_password(password):
-            return jsonify({
-                'error': 'Password required',
-                'requires_password': True
-            }), 401
-        
-        file = File.query.get(share.file_id)
-        
-        return jsonify({
-            'share': share.to_dict(),
-            'file': file.to_dict()
-        }), 200
-        
+        return {"message": "Share deleted successfully"}
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@shares_bp.route('/<share_id>', methods=['DELETE'])
-@jwt_required()
-def delete_share(share_id):
-    """Delete a share"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        share = Share.query.get(share_id)
-        
-        if not share or share.created_by != user_id:
-            return jsonify({'error': 'Share not found'}), 404
-        
-        db.session.delete(share)
-        db.session.commit()
-        
-        return jsonify({'message': 'Share deleted successfully'}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

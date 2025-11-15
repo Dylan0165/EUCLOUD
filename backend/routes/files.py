@@ -1,19 +1,23 @@
-import os
+﻿import os
 import uuid
-from flask import Blueprint, request, jsonify, send_file, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from werkzeug.utils import secure_filename
-from models import db, File, User, Folder, Activity
-from datetime import datetime
 import mimetypes
 import zipfile
 import io
+import shutil
+from datetime import datetime
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File as FastAPIFile, Form
+from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy.orm import Session
 from PIL import Image
 
-files_bp = Blueprint('files', __name__, url_prefix='/api/files')
+from models import get_db, File, User, Folder, Activity
+from auth import get_current_user
+from config import Config
 
-def log_activity(user_id, activity_type, file_id=None, folder_id=None, details=None):
-    """Helper function to log activities"""
+router = APIRouter()
+
+def log_activity(db: Session, user_id: int, activity_type: str, file_id: Optional[int] = None, folder_id: Optional[int] = None, details: Optional[str] = None):
     activity = Activity(
         user_id=user_id,
         file_id=file_id,
@@ -21,15 +25,15 @@ def log_activity(user_id, activity_type, file_id=None, folder_id=None, details=N
         activity_type=activity_type,
         activity_details=details
     )
-    db.session.add(activity)
+    db.add(activity)
 
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
+def allowed_file(filename: str) -> bool:
+    if '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[1].lower()
+    return ext in Config.ALLOWED_EXTENSIONS
 
-def generate_thumbnail(file_path, thumbnail_path):
-    """Generate thumbnail for image files"""
+def generate_thumbnail(file_path: str, thumbnail_path: str) -> Optional[str]:
     try:
         img = Image.open(file_path)
         img.thumbnail((200, 200))
@@ -38,341 +42,290 @@ def generate_thumbnail(file_path, thumbnail_path):
     except:
         return None
 
-@files_bp.route('/upload', methods=['POST'])
-@jwt_required()
-def upload_file():
-    """Upload a file"""
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
+async def upload_file(
+    file: UploadFile = FastAPIFile(...),
+    folder_id: Optional[int] = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        user = User.query.get(user_id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
-        
-        file = request.files['file']
-        
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No selected file")
         
         if not allowed_file(file.filename):
-            return jsonify({'error': 'File type not allowed'}), 400
+            raise HTTPException(status_code=400, detail="File type not allowed")
         
-        # Check storage quota
-        file.seek(0, os.SEEK_END)
-        file_size = file.tell()
-        file.seek(0)
+        contents = await file.read()
+        file_size = len(contents)
         
-        if user.storage_used + file_size > user.storage_quota:
-            return jsonify({'error': 'Storage quota exceeded'}), 413
+        if current_user.storage_used + file_size > current_user.storage_quota:
+            raise HTTPException(status_code=413, detail="Storage quota exceeded")
         
-        # Get folder_id from form data
-        folder_id = request.form.get('folder_id', type=int)
-        
-        # Verify folder ownership
         if folder_id:
-            folder = Folder.query.get(folder_id)
-            if not folder or folder.owner_id != user_id:
-                return jsonify({'error': 'Invalid folder'}), 403
+            folder = db.query(Folder).get(folder_id)
+            if not folder or folder.owner_id != current_user.user_id:
+                raise HTTPException(status_code=403, detail="Invalid folder")
         
-        # Save file
-        filename = secure_filename(file.filename)
+        filename = file.filename
         unique_filename = f"{uuid.uuid4()}_{filename}"
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
-        file.save(file_path)
+        file_path = os.path.join(Config.UPLOAD_FOLDER, unique_filename)
         
-        # Get mime type
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
         mime_type = mimetypes.guess_type(filename)[0]
         
-        # Generate thumbnail for images
         thumbnail_path = None
         if mime_type and mime_type.startswith('image/'):
             thumbnail_filename = f"thumb_{unique_filename}"
-            thumbnail_full_path = os.path.join(current_app.config['THUMBNAIL_FOLDER'], thumbnail_filename)
+            thumbnail_full_path = os.path.join(Config.THUMBNAIL_FOLDER, thumbnail_filename)
             if generate_thumbnail(file_path, thumbnail_full_path):
                 thumbnail_path = thumbnail_filename
         
-        # Create database entry
         new_file = File(
             filename=filename,
             file_path=unique_filename,
             file_size=file_size,
             mime_type=mime_type,
             folder_id=folder_id,
-            owner_id=user_id,
+            owner_id=current_user.user_id,
             thumbnail_path=thumbnail_path
         )
         
-        db.session.add(new_file)
+        db.add(new_file)
+        current_user.storage_used += file_size
         
-        # Update user storage
-        user.storage_used += file_size
+        log_activity(db, current_user.user_id, 'upload', file_id=new_file.file_id, details=f'Uploaded {filename}')
         
-        # Log activity
-        log_activity(user_id, 'upload', file_id=new_file.file_id, details=f'Uploaded {filename}')
+        db.commit()
+        db.refresh(new_file)
         
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'File uploaded successfully',
-            'file': new_file.to_dict()
-        }), 201
-        
+        return {
+            "message": "File uploaded successfully",
+            "file": new_file.to_dict()
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/list")
+async def list_files(
+    folder_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = db.query(File).filter_by(owner_id=current_user.user_id, is_deleted=False)
+    
+    if folder_id:
+        query = query.filter_by(folder_id=folder_id)
+    else:
+        query = query.filter_by(folder_id=None)
+    
+    files = query.all()
+    
+    folder_query = db.query(Folder).filter_by(owner_id=current_user.user_id)
+    if folder_id:
+        folder_query = folder_query.filter_by(parent_folder_id=folder_id)
+    else:
+        folder_query = folder_query.filter_by(parent_folder_id=None)
+    
+    folders = folder_query.all()
+    
+    return {
+        "files": [f.to_dict() for f in files],
+        "folders": [f.to_dict() for f in folders]
+    }
 
-@files_bp.route('/list', methods=['GET'])
-@jwt_required()
-def list_files():
-    """List files in a folder"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        folder_id = request.args.get('folder_id', type=int)
-        
-        # Build query
-        query = File.query.filter_by(owner_id=user_id, is_deleted=False)
-        
-        if folder_id:
-            query = query.filter_by(folder_id=folder_id)
-        else:
-            query = query.filter_by(folder_id=None)
-        
-        files = query.all()
-        
-        # Also get folders
-        folder_query = Folder.query.filter_by(owner_id=user_id)
-        if folder_id:
-            folder_query = folder_query.filter_by(parent_folder_id=folder_id)
-        else:
-            folder_query = folder_query.filter_by(parent_folder_id=None)
-        
-        folders = folder_query.all()
-        
-        return jsonify({
-            'files': [f.to_dict() for f in files],
-            'folders': [f.to_dict() for f in folders]
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@router.get("/{file_id}")
+async def get_file(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return {"file": file.to_dict()}
 
+@router.get("/{file_id}/download")
+async def download_file(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file_path = os.path.join(Config.UPLOAD_FOLDER, file.file_path)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    log_activity(db, current_user.user_id, 'download', file_id=file.file_id, details=f'Downloaded {file.filename}')
+    db.commit()
+    
+    return FileResponse(
+        path=file_path,
+        filename=file.filename,
+        media_type=file.mime_type or 'application/octet-stream'
+    )
 
-@files_bp.route('/<int:file_id>', methods=['GET'])
-@jwt_required()
-def get_file(file_id):
-    """Get file details"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        file = File.query.get(file_id)
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        return jsonify({'file': file.to_dict()}), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@router.put("/{file_id}/rename")
+async def rename_file(
+    file_id: int,
+    new_name: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if not new_name or not allowed_file(new_name):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    old_name = file.filename
+    file.filename = new_name
+    
+    log_activity(db, current_user.user_id, 'rename', file_id=file.file_id, details=f'Renamed {old_name} to {new_name}')
+    
+    db.commit()
+    
+    return {
+        "message": "File renamed successfully",
+        "file": file.to_dict()
+    }
 
+@router.delete("/{file_id}")
+async def delete_file(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file.is_deleted = True
+    file.deleted_at = datetime.utcnow()
+    
+    log_activity(db, current_user.user_id, 'delete', file_id=file.file_id, details=f'Deleted {file.filename}')
+    
+    db.commit()
+    
+    return {"message": "File moved to trash"}
 
-@files_bp.route('/<int:file_id>/download', methods=['GET'])
-@jwt_required()
-def download_file(file_id):
-    """Download a file"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        file = File.query.get(file_id)
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], file.file_path)
-        
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'File not found on disk'}), 404
-        
-        return send_file(file_path, as_attachment=True, download_name=file.filename)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@router.post("/{file_id}/move")
+async def move_file(
+    file_id: int,
+    target_folder_id: Optional[int] = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if target_folder_id:
+        folder = db.query(Folder).get(target_folder_id)
+        if not folder or folder.owner_id != current_user.user_id:
+            raise HTTPException(status_code=403, detail="Invalid target folder")
+    
+    file.folder_id = target_folder_id
+    
+    log_activity(db, current_user.user_id, 'move', file_id=file.file_id, details=f'Moved {file.filename}')
+    
+    db.commit()
+    
+    return {
+        "message": "File moved successfully",
+        "file": file.to_dict()
+    }
 
+@router.post("/{file_id}/copy")
+async def copy_file(
+    file_id: int,
+    target_folder_id: Optional[int] = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    original_file = db.query(File).get(file_id)
+    
+    if not original_file or original_file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if target_folder_id:
+        folder = db.query(Folder).get(target_folder_id)
+        if not folder or folder.owner_id != current_user.user_id:
+            raise HTTPException(status_code=403, detail="Invalid target folder")
+    
+    if current_user.storage_used + original_file.file_size > current_user.storage_quota:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
+    
+    original_path = os.path.join(Config.UPLOAD_FOLDER, original_file.file_path)
+    if not os.path.exists(original_path):
+        raise HTTPException(status_code=404, detail="Original file not found on disk")
+    
+    unique_filename = f"{uuid.uuid4()}_{original_file.filename}"
+    new_path = os.path.join(Config.UPLOAD_FOLDER, unique_filename)
+    shutil.copy2(original_path, new_path)
+    
+    new_file = File(
+        filename=f"Copy of {original_file.filename}",
+        file_path=unique_filename,
+        file_size=original_file.file_size,
+        mime_type=original_file.mime_type,
+        folder_id=target_folder_id,
+        owner_id=current_user.user_id
+    )
+    
+    db.add(new_file)
+    current_user.storage_used += original_file.file_size
+    
+    log_activity(db, current_user.user_id, 'copy', file_id=new_file.file_id, details=f'Copied {original_file.filename}')
+    
+    db.commit()
+    db.refresh(new_file)
+    
+    return {
+        "message": "File copied successfully",
+        "file": new_file.to_dict()
+    }
 
-@files_bp.route('/<int:file_id>/rename', methods=['PUT'])
-@jwt_required()
-def rename_file(file_id):
-    """Rename a file"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
-        
-        if not data or not data.get('filename'):
-            return jsonify({'error': 'Filename is required'}), 400
-        
-        file = File.query.get(file_id)
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        file.filename = data['filename']
-        file.modified_at = datetime.utcnow()
-        
-        # Log activity
-        log_activity(user_id, 'rename', file_id=file_id, details=f'Renamed to {data["filename"]}')
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'File renamed successfully',
-            'file': file.to_dict()
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
-@files_bp.route('/<int:file_id>', methods=['DELETE'])
-@jwt_required()
-def delete_file(file_id):
-    """Delete a file"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        file = File.query.get(file_id)
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        # Mark as deleted (soft delete)
-        file.is_deleted = True
-        file.deleted_at = datetime.utcnow()
-        
-        # Update user storage
-        user = User.query.get(user_id)
-        user.storage_used -= file.file_size
-        
-        # Log activity
-        log_activity(user_id, 'delete', file_id=file_id, details=f'Deleted {file.filename}')
-        
-        db.session.commit()
-        
-        return jsonify({'message': 'File deleted successfully'}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
-@files_bp.route('/<int:file_id>/move', methods=['POST'])
-@jwt_required()
-def move_file(file_id):
-    """Move file to another folder"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
-        
-        file = File.query.get(file_id)
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        new_folder_id = data.get('folder_id')
-        
-        if new_folder_id:
-            folder = Folder.query.get(new_folder_id)
-            if not folder or folder.owner_id != user_id:
-                return jsonify({'error': 'Invalid folder'}), 403
-        
-        file.folder_id = new_folder_id
-        file.modified_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'File moved successfully',
-            'file': file.to_dict()
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
-@files_bp.route('/<int:file_id>/copy', methods=['POST'])
-@jwt_required()
-def copy_file(file_id):
-    """Copy a file"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
-        
-        file = File.query.get(file_id)
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        user = User.query.get(user_id)
-        
-        # Check storage quota
-        if user.storage_used + file.file_size > user.storage_quota:
-            return jsonify({'error': 'Storage quota exceeded'}), 413
-        
-        # Copy physical file
-        old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], file.file_path)
-        new_filename = f"{uuid.uuid4()}_{file.filename}"
-        new_path = os.path.join(current_app.config['UPLOAD_FOLDER'], new_filename)
-        
-        import shutil
-        shutil.copy2(old_path, new_path)
-        
-        # Create new database entry
-        new_file = File(
-            filename=f"Copy of {file.filename}",
-            file_path=new_filename,
-            file_size=file.file_size,
-            mime_type=file.mime_type,
-            folder_id=data.get('folder_id', file.folder_id),
-            owner_id=user_id,
-            thumbnail_path=file.thumbnail_path
+@router.get("/{file_id}/preview")
+async def preview_file(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if file.thumbnail_path:
+        thumbnail_full_path = os.path.join(Config.THUMBNAIL_FOLDER, file.thumbnail_path)
+        if os.path.exists(thumbnail_full_path):
+            return FileResponse(
+                path=thumbnail_full_path,
+                media_type='image/jpeg'
+            )
+    
+    file_path = os.path.join(Config.UPLOAD_FOLDER, file.file_path)
+    if os.path.exists(file_path):
+        return FileResponse(
+            path=file_path,
+            media_type=file.mime_type or 'application/octet-stream'
         )
-        
-        db.session.add(new_file)
-        
-        # Update user storage
-        user.storage_used += file.file_size
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'File copied successfully',
-            'file': new_file.to_dict()
-        }), 201
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
-@files_bp.route('/<int:file_id>/preview', methods=['GET'])
-@jwt_required()
-def preview_file(file_id):
-    """Preview a file (for images, PDFs, text files)"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        file = File.query.get(file_id)
-        
-        if not file or file.owner_id != user_id:
-            return jsonify({'error': 'File not found'}), 404
-        
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], file.file_path)
-        
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'File not found on disk'}), 404
-        
-        # Return file with inline disposition for preview
-        return send_file(file_path, mimetype=file.mime_type)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    
+    raise HTTPException(status_code=404, detail="File not found on disk")

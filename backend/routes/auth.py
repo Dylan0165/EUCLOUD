@@ -1,91 +1,70 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models import db, User
-from datetime import timedelta
+﻿from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
-auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+from models import get_db, User
+from schemas import UserRegister, UserLogin, AuthResponse
+from auth import create_access_token, get_current_user
 
-@auth_bp.route('/register', methods=['POST'])
-def register():
-    """Register a new user"""
+router = APIRouter()
+
+
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered"
+        )
+    
+    user = User(email=user_data.email)
+    user.set_password(user_data.password)
+    
     try:
-        data = request.get_json()
-        
-        if not data or not data.get('email') or not data.get('password'):
-            return jsonify({'error': 'Email and password are required'}), 400
-        
-        # Check if user already exists
-        if User.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'Email already registered'}), 409
-        
-        # Create new user
-        user = User(email=data['email'])
-        user.set_password(data['password'])
-        
-        db.session.add(user)
-        db.session.commit()
-        
-        # Create access token - identity must be string for Flask-JWT-Extended
-        access_token = create_access_token(identity=str(user.user_id))
-        
-        return jsonify({
-            'message': 'User registered successfully',
-            'access_token': access_token,
-            'user': user.to_dict()
-        }), 201
-        
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
+        )
+    
+    access_token = create_access_token(user.user_id)
+    
+    return {
+        "message": "User registered successfully",
+        "access_token": access_token,
+        "user": user.to_dict()
+    }
 
 
-@auth_bp.route('/login', methods=['POST'])
-def login():
-    """Login user"""
-    try:
-        data = request.get_json()
-        
-        if not data or not data.get('email') or not data.get('password'):
-            return jsonify({'error': 'Email and password are required'}), 400
-        
-        # Find user
-        user = User.query.filter_by(email=data['email']).first()
-        
-        if not user or not user.check_password(data['password']):
-            return jsonify({'error': 'Invalid email or password'}), 401
-        
-        # Create access token - identity must be string for Flask-JWT-Extended
-        access_token = create_access_token(identity=str(user.user_id))
-        
-        return jsonify({
-            'message': 'Login successful',
-            'access_token': access_token,
-            'user': user.to_dict()
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@router.post("/login")
+async def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == credentials.email).first()
+    
+    if not user or not user.check_password(credentials.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(user.user_id)
+    
+    return {
+        "message": "Login successful",
+        "access_token": access_token,
+        "user": user.to_dict()
+    }
 
 
-@auth_bp.route('/logout', methods=['POST'])
-@jwt_required()
-def logout():
-    """Logout user (client-side token removal)"""
-    return jsonify({'message': 'Logout successful'}), 200
+@router.post("/logout")
+async def logout(current_user: User = Depends(get_current_user)):
+    return {"message": "Logout successful"}
 
 
-@auth_bp.route('/me', methods=['GET'])
-@jwt_required()
-def get_current_user():
-    """Get current user info"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string back to int
-        user = User.query.get(user_id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        return jsonify({'user': user.to_dict()}), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@router.get("/me")
+async def get_me(current_user: User = Depends(get_current_user)):
+    return {"user": current_user.to_dict()}

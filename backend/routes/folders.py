@@ -1,137 +1,123 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Folder, File
-from datetime import datetime
+﻿from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
 
-folders_bp = Blueprint('folders', __name__, url_prefix='/api/folders')
+from models import get_db, Folder, File, User
+from auth import get_current_user
 
-@folders_bp.route('/create', methods=['POST'])
-@jwt_required()
-def create_folder():
-    """Create a new folder"""
+router = APIRouter()
+
+class FolderCreate(BaseModel):
+    folder_name: str
+    parent_folder_id: Optional[int] = None
+
+class FolderRename(BaseModel):
+    folder_name: str
+
+@router.post("/create", status_code=status.HTTP_201_CREATED)
+async def create_folder(
+    folder_data: FolderCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if folder_data.parent_folder_id:
+        parent = db.query(Folder).get(folder_data.parent_folder_id)
+        if not parent or parent.owner_id != current_user.user_id:
+            raise HTTPException(status_code=403, detail="Invalid parent folder")
+    
+    folder = Folder(
+        folder_name=folder_data.folder_name,
+        parent_folder_id=folder_data.parent_folder_id,
+        owner_id=current_user.user_id
+    )
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
+        db.add(folder)
+        db.commit()
+        db.refresh(folder)
         
-        if not data or not data.get('folder_name'):
-            return jsonify({'error': 'Folder name is required'}), 400
-        
-        parent_folder_id = data.get('parent_folder_id')
-        
-        # Verify parent folder ownership if specified
-        if parent_folder_id:
-            parent = Folder.query.get(parent_folder_id)
-            if not parent or parent.owner_id != user_id:
-                return jsonify({'error': 'Invalid parent folder'}), 403
-        
-        # Create folder
-        folder = Folder(
-            folder_name=data['folder_name'],
-            parent_folder_id=parent_folder_id,
-            owner_id=user_id
-        )
-        
-        db.session.add(folder)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Folder created successfully',
-            'folder': folder.to_dict()
-        }), 201
-        
+        return {
+            "message": "Folder created successfully",
+            "folder": folder.to_dict()
+        }
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/list")
+async def list_folders(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    folders = db.query(Folder).filter_by(owner_id=current_user.user_id).all()
+    
+    return {
+        "folders": [f.to_dict() for f in folders]
+    }
 
-@folders_bp.route('/list', methods=['GET'])
-@jwt_required()
-def list_folders():
-    """List all folders"""
+@router.get("/{folder_id}")
+async def get_folder(
+    folder_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    folder = db.query(Folder).get(folder_id)
+    
+    if not folder or folder.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    
+    return {
+        "folder": folder.to_dict(include_children=True)
+    }
+
+@router.put("/{folder_id}/rename")
+async def rename_folder(
+    folder_id: int,
+    folder_data: FolderRename,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    folder = db.query(Folder).get(folder_id)
+    
+    if not folder or folder.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    
+    folder.folder_name = folder_data.folder_name
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        folders = Folder.query.filter_by(owner_id=user_id).all()
+        db.commit()
         
-        return jsonify({
-            'folders': [f.to_dict() for f in folders]
-        }), 200
-        
+        return {
+            "message": "Folder renamed successfully",
+            "folder": folder.to_dict()
+        }
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@folders_bp.route('/<int:folder_id>', methods=['GET'])
-@jwt_required()
-def get_folder(folder_id):
-    """Get folder details"""
+@router.delete("/{folder_id}")
+async def delete_folder(
+    folder_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    folder = db.query(Folder).get(folder_id)
+    
+    if not folder or folder.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    
+    has_files = db.query(File).filter_by(folder_id=folder_id, is_deleted=False).first()
+    has_subfolders = db.query(Folder).filter_by(parent_folder_id=folder_id).first()
+    
+    if has_files or has_subfolders:
+        raise HTTPException(status_code=400, detail="Folder is not empty")
+    
     try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        folder = Folder.query.get(folder_id)
+        db.delete(folder)
+        db.commit()
         
-        if not folder or folder.owner_id != user_id:
-            return jsonify({'error': 'Folder not found'}), 404
-        
-        return jsonify({
-            'folder': folder.to_dict(include_children=True)
-        }), 200
-        
+        return {"message": "Folder deleted successfully"}
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@folders_bp.route('/<int:folder_id>/rename', methods=['PUT'])
-@jwt_required()
-def rename_folder(folder_id):
-    """Rename a folder"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        data = request.get_json()
-        
-        if not data or not data.get('folder_name'):
-            return jsonify({'error': 'Folder name is required'}), 400
-        
-        folder = Folder.query.get(folder_id)
-        
-        if not folder or folder.owner_id != user_id:
-            return jsonify({'error': 'Folder not found'}), 404
-        
-        folder.folder_name = data['folder_name']
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Folder renamed successfully',
-            'folder': folder.to_dict()
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
-@folders_bp.route('/<int:folder_id>', methods=['DELETE'])
-@jwt_required()
-def delete_folder(folder_id):
-    """Delete a folder"""
-    try:
-        user_id = int(get_jwt_identity())  # Convert string to int
-        folder = Folder.query.get(folder_id)
-        
-        if not folder or folder.owner_id != user_id:
-            return jsonify({'error': 'Folder not found'}), 404
-        
-        # Check if folder is empty
-        has_files = File.query.filter_by(folder_id=folder_id, is_deleted=False).first()
-        has_subfolders = Folder.query.filter_by(parent_folder_id=folder_id).first()
-        
-        if has_files or has_subfolders:
-            return jsonify({'error': 'Folder is not empty'}), 400
-        
-        db.session.delete(folder)
-        db.session.commit()
-        
-        return jsonify({'message': 'Folder deleted successfully'}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

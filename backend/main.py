@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 import os
 
 from config import Config
-from models import db, Base, engine
+from models import Base, engine
 from auth import get_current_user
 
 # Import routers

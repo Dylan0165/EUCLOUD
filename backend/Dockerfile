@@ -23,8 +23,7 @@ RUN mkdir -p uploads thumbnails instance
 EXPOSE 5000
 
 # Set environment variables
-ENV FLASK_APP=app.py
 ENV PYTHONUNBUFFERED=1
 
-# Run the application
-CMD ["python", "app.py"]
+# Run the application with uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
