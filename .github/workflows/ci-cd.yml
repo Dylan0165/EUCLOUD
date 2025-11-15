@@ -158,9 +158,12 @@ jobs:
         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
     
     - name: Deploy to Kubernetes
+      env:
+        KUBECONFIG: $HOME/.kube/config
       run: |
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/pvc.yaml
+        kubectl apply -f k8s/secrets.yaml
         kubectl apply -f k8s/backend-deployment.yaml
         kubectl apply -f k8s/frontend-deployment.yaml
         kubectl apply -f k8s/services.yaml
@@ -174,6 +177,8 @@ jobs:
         kubectl rollout status deployment/eucloud-frontend -n eucloud
     
     - name: Verify deployment
+      env:
+        KUBECONFIG: $HOME/.kube/config
       run: |
         kubectl get pods -n eucloud
         kubectl get services -n eucloud
