@@ -27,20 +27,8 @@ export const authService = {
 
   // Get current user
   getCurrentUser: async () => {
-    // Double check token exists
-    const token = localStorage.getItem('token')
-    if (!token) {
-      throw new Error('No authentication token found')
-    }
-    
     const response = await api.get('/auth/me')
     return response.data.user
-  },
-
-  // Debug endpoint to check headers
-  debugHeaders: async () => {
-    const response = await api.get('/auth/debug-headers')
-    return response.data
   }
 }
 

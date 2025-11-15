@@ -89,16 +89,3 @@ def get_current_user():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-@auth_bp.route('/debug-headers', methods=['GET'])
-def debug_headers():
-    """Debug endpoint to check what headers are received"""
-    headers = dict(request.headers)
-    auth_header = request.headers.get('Authorization')
-    return jsonify({
-        'all_headers': headers,
-        'authorization_header': auth_header,
-        'has_auth_header': bool(auth_header),
-        'bearer_format': auth_header.startswith('Bearer ') if auth_header else False
-    })
