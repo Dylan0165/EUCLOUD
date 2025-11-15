@@ -23,12 +23,12 @@ metadata:
   labels:
     app: eucloud-frontend
 spec:
-  type: LoadBalancer
-  loadBalancerIP: 192.168.124.50
-  ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
-    name: http
+  type: NodePort
   selector:
     app: eucloud-frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    nodePort: 30080
+
