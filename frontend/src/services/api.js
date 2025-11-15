@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// Use backend NodePort endpoint
-const API_URL = 'http://192.168.124.50:30500'
+// Use backend NodePort endpoint with /api prefix
+const API_URL = 'http://192.168.124.50:30500/api'
 
 // Create axios instance
 const api = axios.create({
