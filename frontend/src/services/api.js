@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// Use relative path - nginx will proxy to backend service
-const API_URL = '/api'
+// Use backend NodePort endpoint
+const API_URL = 'http://192.168.124.50:30500'
 
 // Create axios instance
 const api = axios.create({
