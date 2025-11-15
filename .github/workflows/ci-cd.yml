@@ -152,12 +152,12 @@ jobs:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
       run: |
         kubectl get nodes
-        kubectl apply -f k8s/namespace.yaml --validate=false
-        kubectl apply -f k8s/pvc.yaml --validate=false
-        kubectl apply -f k8s/secrets.yaml --validate=false
-        kubectl apply -f k8s/backend-deployment.yaml --validate=false
-        kubectl apply -f k8s/frontend-deployment.yaml --validate=false
-        kubectl apply -f k8s/services.yaml --validate=false
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/pvc.yaml
+        kubectl apply -f k8s/secrets.yaml
+        kubectl apply -f k8s/backend-deployment.yaml
+        kubectl apply -f k8s/frontend-deployment.yaml
+        kubectl apply -f k8s/services.yaml
         
         # Restart deployments to pull latest images
         kubectl rollout restart deployment/eucloud-backend -n eucloud
