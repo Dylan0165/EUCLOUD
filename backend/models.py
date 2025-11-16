@@ -54,12 +54,16 @@ class User(Base):
     shares = relationship('Share', back_populates='creator', cascade='all, delete-orphan')
     
     def set_password(self, password):
-        """Hash and set password"""
-        self.password_hash = pwd_context.hash(password)
+        """Hash and set password - truncate to 72 bytes for bcrypt"""
+        password_bytes = password.encode('utf-8')[:72]
+        password_truncated = password_bytes.decode('utf-8', errors='ignore')
+        self.password_hash = pwd_context.hash(password_truncated)
     
     def check_password(self, password):
-        """Verify password"""
-        return pwd_context.verify(password, self.password_hash)
+        """Verify password - truncate to 72 bytes for bcrypt"""
+        password_bytes = password.encode('utf-8')[:72]
+        password_truncated = password_bytes.decode('utf-8', errors='ignore')
+        return pwd_context.verify(password_truncated, self.password_hash)
     
     def to_dict(self):
         """Convert to dictionary"""

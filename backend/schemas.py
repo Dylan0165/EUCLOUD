@@ -9,12 +9,17 @@ from datetime import datetime
 # Auth Schemas
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: str = Field(
+        ..., 
+        min_length=8, 
+        max_length=72,
+        description="Password must be between 8 and 72 characters"
+    )
 
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., max_length=72)
 
 
 class Token(BaseModel):
