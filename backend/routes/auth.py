@@ -24,28 +24,42 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
                 detail="Email already registered"
             )
         
+        logger.info(f"Creating user object for {user_data.email}")
         user = User(email=user_data.email)
+        
+        logger.info(f"Setting password for {user_data.email}")
         user.set_password(user_data.password)
         
         try:
+            logger.info(f"Adding user to database session")
             db.add(user)
+            
+            logger.info(f"Committing transaction")
             db.commit()
+            
+            logger.info(f"Refreshing user object")
             db.refresh(user)
+            
             logger.info(f"User {user_data.email} registered successfully with ID: {user.user_id}")
         except Exception as e:
             db.rollback()
             logger.error(f"Database error during registration for {user_data.email}: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create user: {str(e)}"
+                detail=f"Database error: {str(e)}"
             )
         
+        logger.info(f"Creating access token for user {user.user_id}")
         access_token = create_access_token(user.user_id)
         
+        logger.info(f"Converting user to dict")
+        user_dict = user.to_dict()
+        
+        logger.info(f"Registration successful, returning response")
         return {
             "message": "User registered successfully",
             "access_token": access_token,
-            "user": user.to_dict()
+            "user": user_dict
         }
     
     except HTTPException:
