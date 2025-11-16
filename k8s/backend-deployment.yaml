@@ -25,6 +25,8 @@ spec:
         - containerPort: 5000
           name: http
         env:
+        - name: DEPLOYMENT_TIMESTAMP
+          value: "TIMESTAMP_PLACEHOLDER"
         - name: FLASK_ENV
           value: "production"
         - name: SERVER_IP

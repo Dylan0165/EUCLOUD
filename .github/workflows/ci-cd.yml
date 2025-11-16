@@ -152,16 +152,16 @@ jobs:
         echo "Deploying EUCLOUD to Kubernetes..."
         
         # Set timestamp for forcing pod recreation
-        TIMESTAMP=$(date +%s)
+        TIMESTAMP=$(date +%s || echo $RANDOM)
         echo "Deployment timestamp: $TIMESTAMP"
         
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/secrets.yaml
         kubectl apply -f k8s/pvc.yaml
         
-        # Apply deployments with timestamp annotation to force update
-        sed "s/{{ now }}/$TIMESTAMP/g" k8s/backend-deployment.yaml | kubectl apply -f -
-        sed "s/{{ now }}/$TIMESTAMP/g" k8s/frontend-deployment.yaml | kubectl apply -f -
+        # Apply deployments with timestamp to force update
+        sed "s/{{ now }}/$TIMESTAMP/g; s/TIMESTAMP_PLACEHOLDER/$TIMESTAMP/g" k8s/backend-deployment.yaml | kubectl apply -f -
+        sed "s/{{ now }}/$TIMESTAMP/g; s/TIMESTAMP_PLACEHOLDER/$TIMESTAMP/g" k8s/frontend-deployment.yaml | kubectl apply -f -
         
         kubectl apply -f k8s/services.yaml
         
