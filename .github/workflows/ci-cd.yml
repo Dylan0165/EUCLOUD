@@ -158,6 +158,10 @@ jobs:
         kubectl apply -f k8s/frontend-deployment.yaml
         kubectl apply -f k8s/services.yaml
         
+        echo "Force restart deployments to pull new images..."
+        kubectl rollout restart deployment/eucloud-backend -n eucloud
+        kubectl rollout restart deployment/eucloud-frontend -n eucloud
+        
         echo "Waiting for deployments to be ready..."
         kubectl rollout status deployment/eucloud-backend -n eucloud --timeout=300s
         kubectl rollout status deployment/eucloud-frontend -n eucloud --timeout=300s
