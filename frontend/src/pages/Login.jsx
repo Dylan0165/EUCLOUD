@@ -70,6 +70,7 @@ function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
+              maxLength={72}
               disabled={loading}
             />
           </div>

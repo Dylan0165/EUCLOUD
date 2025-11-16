@@ -81,6 +81,8 @@ function Register() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
+              minLength={8}
+              maxLength={72}
               disabled={loading}
             />
           </div>
@@ -97,6 +99,8 @@ function Register() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="••••••••"
+              minLength={8}
+              maxLength={72}
               disabled={loading}
             />
           </div>
