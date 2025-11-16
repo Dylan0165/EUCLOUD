@@ -151,16 +151,19 @@ jobs:
       run: |
         echo "Deploying EUCLOUD to Kubernetes..."
         
+        # Set timestamp for forcing pod recreation
+        TIMESTAMP=$(date +%s)
+        echo "Deployment timestamp: $TIMESTAMP"
+        
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/secrets.yaml
         kubectl apply -f k8s/pvc.yaml
-        kubectl apply -f k8s/backend-deployment.yaml
-        kubectl apply -f k8s/frontend-deployment.yaml
-        kubectl apply -f k8s/services.yaml
         
-        echo "Force restart deployments to pull new images..."
-        kubectl rollout restart deployment/eucloud-backend -n eucloud
-        kubectl rollout restart deployment/eucloud-frontend -n eucloud
+        # Apply deployments with timestamp annotation to force update
+        sed "s/{{ now }}/$TIMESTAMP/g" k8s/backend-deployment.yaml | kubectl apply -f -
+        sed "s/{{ now }}/$TIMESTAMP/g" k8s/frontend-deployment.yaml | kubectl apply -f -
+        
+        kubectl apply -f k8s/services.yaml
         
         echo "Waiting for deployments to be ready..."
         kubectl rollout status deployment/eucloud-backend -n eucloud --timeout=300s

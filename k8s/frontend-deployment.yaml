@@ -14,6 +14,8 @@ spec:
     metadata:
       labels:
         app: eucloud-frontend
+      annotations:
+        rollout-timestamp: "{{ now }}"
     spec:
       containers:
       - name: frontend
