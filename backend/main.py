@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
+import logging
+import sys
 
 from config import Config
 from models import Base, engine
@@ -22,16 +24,28 @@ from routes.trash import router as trash_router
 from routes.extras import router as extras_router
 
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup: Create database tables
     Config.init_app(None)  # Initialize config (create directories)
     Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created")
+    logger.info("✅ Database tables created")
+    logger.info("🚀 EUCLOUD API started successfully")
     yield
     # Shutdown: Cleanup if needed
-    print("👋 Shutting down EUCLOUD API")
+    logger.info("👋 Shutting down EUCLOUD API")
 
 
 # Create FastAPI app
