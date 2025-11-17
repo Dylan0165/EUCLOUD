@@ -151,25 +151,26 @@ jobs:
       run: |
         echo "Deploying EUCLOUD to Kubernetes..."
         
-        # Set timestamp for forcing pod recreation
-        TIMESTAMP=$(date +%s || echo $RANDOM)
-        echo "Deployment timestamp: $TIMESTAMP"
+        # Get commit SHA for image tag
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        echo "Deploying images with SHA: main-$SHORT_SHA"
         
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/secrets.yaml
         kubectl apply -f k8s/pvc.yaml
-        
-        # Apply deployments with timestamp to force update
-        sed "s/{{ now }}/$TIMESTAMP/g; s/TIMESTAMP_PLACEHOLDER/$TIMESTAMP/g" k8s/backend-deployment.yaml | kubectl apply -f -
-        sed "s/{{ now }}/$TIMESTAMP/g; s/TIMESTAMP_PLACEHOLDER/$TIMESTAMP/g" k8s/frontend-deployment.yaml | kubectl apply -f -
-        
+        kubectl apply -f k8s/backend-deployment.yaml
+        kubectl apply -f k8s/frontend-deployment.yaml
         kubectl apply -f k8s/services.yaml
+        
+        # Force update to SHA-tagged images (this triggers pod recreation)
+        kubectl set image deployment/eucloud-backend backend=ghcr.io/dylan0165/eucloud-backend:main-$SHORT_SHA -n eucloud
+        kubectl set image deployment/eucloud-frontend frontend=ghcr.io/dylan0165/eucloud-frontend:main-$SHORT_SHA -n eucloud
         
         echo "Waiting for deployments to be ready..."
         kubectl rollout status deployment/eucloud-backend -n eucloud --timeout=300s
         kubectl rollout status deployment/eucloud-frontend -n eucloud --timeout=300s
         
-        echo "Deployment complete!"
+        echo "Deployment complete with image tag: main-$SHORT_SHA"
     
     - name: Verify Deployment
       run: |
