@@ -147,9 +147,59 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
+    - name: Run Database Migration (if needed)
+      run: |
+        echo "Checking if database migration is needed..."
+        
+        # Check if migration script exists in repo
+        if [ -f "backend/migrate_to_multiapp.py" ]; then
+          echo "Migration script found, running migration job..."
+          
+          # Create a one-time migration job
+          cat <<EOF | kubectl apply -f -
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: eucloud-migration-$(date +%s)
+          namespace: eucloud
+        spec:
+          ttlSecondsAfterFinished: 100
+          template:
+            spec:
+              restartPolicy: Never
+              containers:
+              - name: migration
+                image: ghcr.io/dylan0165/eucloud-backend:latest
+                command: ["python", "migrate_to_multiapp.py"]
+                volumeMounts:
+                - name: database
+                  mountPath: /app/instance
+                - name: uploads
+                  mountPath: /app/uploads
+              volumes:
+              - name: database
+                persistentVolumeClaim:
+                  claimName: eucloud-database-pvc
+              - name: uploads
+                persistentVolumeClaim:
+                  claimName: eucloud-uploads-pvc
+        EOF
+          
+          echo "Migration job created. Waiting for completion (max 2 minutes)..."
+          sleep 5
+          
+          # Wait for migration job (with timeout)
+          MIGRATION_JOB=$(kubectl get jobs -n eucloud --sort-by=.metadata.creationTimestamp -o name | tail -1)
+          kubectl wait --for=condition=complete --timeout=120s $MIGRATION_JOB -n eucloud || echo "Migration skipped or already done"
+          
+          echo "Migration completed or skipped"
+        else
+          echo "No migration needed, skipping..."
+        fi
+    
     - name: Deploy to Kubernetes
       run: |
-        echo "Deploying EUCLOUD to Kubernetes..."
+        echo "Deploying EU-CORE-BACKEND to Kubernetes..."
         
         # Get commit SHA for image tag
         SHORT_SHA=$(git rev-parse --short HEAD)
@@ -175,7 +225,7 @@ jobs:
     - name: Verify Deployment
       run: |
         echo ""
-        echo "Deployment Status:"
+        echo "=== EU-CORE-BACKEND Deployment Status ==="
         echo ""
         echo "=== Pods ==="
         kubectl get pods -n eucloud -o wide
@@ -186,7 +236,19 @@ jobs:
         echo "=== Persistent Volume Claims ==="
         kubectl get pvc -n eucloud
         echo ""
-        echo "EUCLOUD deployed successfully!"
-        echo "Frontend: http://192.168.124.50:30080"
-        echo "Backend API: http://192.168.124.50:30500"
-        echo "API Docs: http://192.168.124.50:30500/docs"
+        echo "✅ EU-CORE-BACKEND deployed successfully!"
+        echo ""
+        echo "📍 Access Points:"
+        echo "   EuCloud Frontend:  http://192.168.124.50:30080"
+        echo "   EU-CORE API:       http://192.168.124.50:30500"
+        echo "   API Docs:          http://192.168.124.50:30500/docs"
+        echo "   Health Check:      http://192.168.124.50:30500/health"
+        echo ""
+        echo "🎯 Multi-App Support:"
+        echo "   - EuCloud (file browser) - Port 30080 ✅"
+        echo "   - EuType (document editor) - Port 30081 (pending deployment)"
+        echo ""
+        echo "📝 New Features:"
+        echo "   - User-based storage structure"
+        echo "   - Content endpoints for document editing"
+        echo "   - Multi-app file categorization (app_type)"

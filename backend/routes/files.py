@@ -46,6 +46,7 @@ def generate_thumbnail(file_path: str, thumbnail_path: str) -> Optional[str]:
 async def upload_file(
     file: UploadFile = FastAPIFile(...),
     folder_id: Optional[int] = Form(None),
+    app_type: str = Form('generic'),  # NEW: 'generic', 'eutype', 'eusheets'
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -67,9 +68,18 @@ async def upload_file(
             if not folder or folder.owner_id != current_user.user_id:
                 raise HTTPException(status_code=403, detail="Invalid folder")
         
+        # NEW: User-based directory structure
+        user_upload_dir = os.path.join(Config.UPLOAD_FOLDER, str(current_user.user_id))
+        os.makedirs(user_upload_dir, exist_ok=True)
+        
         filename = file.filename
-        unique_filename = f"{uuid.uuid4()}_{filename}"
-        file_path = os.path.join(Config.UPLOAD_FOLDER, unique_filename)
+        file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        unique_file_id = str(uuid.uuid4())
+        unique_filename = f"{unique_file_id}.{file_ext}" if file_ext else unique_file_id
+        
+        # NEW: Store as uploads/{owner_id}/{file_id}.ext
+        file_path = os.path.join(user_upload_dir, unique_filename)
+        relative_path = f"{current_user.user_id}/{unique_filename}"
         
         with open(file_path, "wb") as f:
             f.write(contents)
@@ -85,11 +95,12 @@ async def upload_file(
         
         new_file = File(
             filename=filename,
-            file_path=unique_filename,
+            file_path=relative_path,  # NEW: Store relative path
             file_size=file_size,
             mime_type=mime_type,
             folder_id=folder_id,
             owner_id=current_user.user_id,
+            app_type=app_type,  # NEW: Store app type
             thumbnail_path=thumbnail_path
         )
         
@@ -329,3 +340,98 @@ async def preview_file(
         )
     
     raise HTTPException(status_code=404, detail="File not found on disk")
+
+# NEW: Content endpoints for EuType integration
+@router.get("/{file_id}/content")
+async def get_file_content(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the raw content of a file as text/JSON.
+    Used by EuType for document editing.
+    """
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file_path = os.path.join(Config.UPLOAD_FOLDER, file.file_path)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        log_activity(db, current_user.user_id, 'read_content', file_id=file.file_id, details=f'Read content of {file.filename}')
+        db.commit()
+        
+        return {
+            "file_id": file.file_id,
+            "filename": file.filename,
+            "content": content,
+            "app_type": file.app_type,
+            "modified_at": file.modified_at.isoformat() if file.modified_at else None
+        }
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File is not text-based")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+@router.put("/{file_id}/content")
+async def update_file_content(
+    file_id: int,
+    content: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update the raw content of a file.
+    Used by EuType for saving document changes.
+    """
+    file = db.query(File).get(file_id)
+    
+    if not file or file.owner_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file_path = os.path.join(Config.UPLOAD_FOLDER, file.file_path)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    try:
+        # Calculate size difference for quota management
+        old_size = file.file_size
+        new_size = len(content.encode('utf-8'))
+        size_diff = new_size - old_size
+        
+        # Check quota
+        if current_user.storage_used + size_diff > current_user.storage_quota:
+            raise HTTPException(status_code=413, detail="Storage quota exceeded")
+        
+        # Write new content
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        # Update file metadata
+        file.file_size = new_size
+        file.modified_at = datetime.utcnow()
+        current_user.storage_used += size_diff
+        
+        log_activity(db, current_user.user_id, 'update_content', file_id=file.file_id, details=f'Updated content of {file.filename}')
+        
+        db.commit()
+        db.refresh(file)
+        
+        return {
+            "message": "File content updated successfully",
+            "file": file.to_dict()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating file: {str(e)}")

@@ -56,10 +56,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware
+# CORS Middleware - Updated for multi-app support (EU-CORE-BACKEND)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this properly for production
+    allow_origins=[
+        "http://192.168.124.50:30080",  # EuCloud (file browser)
+        "http://192.168.124.50:30081",  # EuType (document editor)
+        "http://localhost:5173",         # Local development
+        "http://localhost:30080",
+        "http://localhost:30081"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

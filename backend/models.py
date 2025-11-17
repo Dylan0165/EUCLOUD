@@ -116,6 +116,7 @@ class File(Base):
     mime_type = Column(String(100))
     folder_id = Column(Integer, ForeignKey('folders.folder_id'), nullable=True)
     owner_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
+    app_type = Column(String(50), default='generic')  # NEW: 'generic', 'eutype', 'eusheets'
     thumbnail_path = Column(Text)
     is_deleted = Column(Boolean, default=False)
     deleted_at = Column(DateTime, nullable=True)
