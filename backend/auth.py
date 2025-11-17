@@ -18,8 +18,8 @@ SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-key-change-in-producti
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing - using Argon2 (no 72-byte limit, more secure than bcrypt)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 # Security scheme
 security = HTTPBearer()

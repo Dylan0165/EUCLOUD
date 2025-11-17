@@ -23,8 +23,8 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing - using Argon2 (no 72-byte limit, more secure than bcrypt)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 # Dependency to get database session
@@ -54,19 +54,12 @@ class User(Base):
     shares = relationship('Share', back_populates='creator', cascade='all, delete-orphan')
     
     def set_password(self, password):
-        """Hash and set password - truncate to 72 bytes for bcrypt"""
-        print(f"🔧 DEBUG: set_password called with password length: {len(password)} characters")
-        password_bytes = password.encode('utf-8')[:72]
-        password_truncated = password_bytes.decode('utf-8', errors='ignore')
-        print(f"🔧 DEBUG: Truncated to {len(password_truncated)} characters")
-        self.password_hash = pwd_context.hash(password_truncated)
-        print(f"🔧 DEBUG: Password hashed successfully!")
+        """Hash and set password using Argon2"""
+        self.password_hash = pwd_context.hash(password)
     
     def check_password(self, password):
-        """Verify password - truncate to 72 bytes for bcrypt"""
-        password_bytes = password.encode('utf-8')[:72]
-        password_truncated = password_bytes.decode('utf-8', errors='ignore')
-        return pwd_context.verify(password_truncated, self.password_hash)
+        """Verify password using Argon2"""
+        return pwd_context.verify(password, self.password_hash)
     
     def to_dict(self):
         """Convert to dictionary"""
