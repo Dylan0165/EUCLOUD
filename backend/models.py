@@ -55,9 +55,12 @@ class User(Base):
     
     def set_password(self, password):
         """Hash and set password - truncate to 72 bytes for bcrypt"""
+        print(f"🔧 DEBUG: set_password called with password length: {len(password)} characters")
         password_bytes = password.encode('utf-8')[:72]
         password_truncated = password_bytes.decode('utf-8', errors='ignore')
+        print(f"🔧 DEBUG: Truncated to {len(password_truncated)} characters")
         self.password_hash = pwd_context.hash(password_truncated)
+        print(f"🔧 DEBUG: Password hashed successfully!")
     
     def check_password(self, password):
         """Verify password - truncate to 72 bytes for bcrypt"""
