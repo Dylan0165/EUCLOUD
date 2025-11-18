@@ -150,7 +150,7 @@ async def list_files(
         "folders": [f.to_dict() for f in folders]
     }
 
-@router.get("/{file_id}")
+@router.get("/{file_id:int}")
 async def get_file(
     file_id: int,
     current_user: User = Depends(get_current_user),
@@ -163,7 +163,7 @@ async def get_file(
     
     return {"file": file.to_dict()}
 
-@router.get("/{file_id}/download")
+@router.get("/{file_id:int}/download")
 async def download_file(
     file_id: int,
     current_user: User = Depends(get_current_user),
@@ -188,7 +188,7 @@ async def download_file(
         media_type=file.mime_type or 'application/octet-stream'
     )
 
-@router.put("/{file_id}/rename")
+@router.put("/{file_id:int}/rename")
 async def rename_file(
     file_id: int,
     new_name: str = Form(...),
@@ -215,7 +215,7 @@ async def rename_file(
         "file": file.to_dict()
     }
 
-@router.delete("/{file_id}")
+@router.delete("/{file_id:int}")
 async def delete_file(
     file_id: int,
     current_user: User = Depends(get_current_user),
@@ -235,7 +235,7 @@ async def delete_file(
     
     return {"message": "File moved to trash"}
 
-@router.post("/{file_id}/move")
+@router.post("/{file_id:int}/move")
 async def move_file(
     file_id: int,
     target_folder_id: Optional[int] = Form(None),
@@ -263,7 +263,7 @@ async def move_file(
         "file": file.to_dict()
     }
 
-@router.post("/{file_id}/copy")
+@router.post("/{file_id:int}/copy")
 async def copy_file(
     file_id: int,
     target_folder_id: Optional[int] = Form(None),
@@ -313,7 +313,7 @@ async def copy_file(
         "file": new_file.to_dict()
     }
 
-@router.get("/{file_id}/preview")
+@router.get("/{file_id:int}/preview")
 async def preview_file(
     file_id: int,
     current_user: User = Depends(get_current_user),
@@ -342,7 +342,7 @@ async def preview_file(
     raise HTTPException(status_code=404, detail="File not found on disk")
 
 # NEW: Content endpoints for EuType integration
-@router.get("/{file_id}/content")
+@router.get("/{file_id:int}/content")
 async def get_file_content(
     file_id: int,
     current_user: User = Depends(get_current_user),
@@ -381,7 +381,7 @@ async def get_file_content(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
-@router.put("/{file_id}/content")
+@router.put("/{file_id:int}/content")
 async def update_file_content(
     file_id: int,
     content: str = Form(...),
