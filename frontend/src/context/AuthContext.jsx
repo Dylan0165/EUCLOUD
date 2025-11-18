@@ -31,6 +31,7 @@ export const AuthProvider = ({ children }) => {
       
       if (response.status === 200 && response.data.user) {
         setUser(response.data.user)
+        console.log('SSO authentication successful')
       } else {
         // No valid session, redirect to SSO login portal
         redirectToSSOLogin()
@@ -38,6 +39,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       if (error.response?.status === 401) {
         // Unauthorized - redirect to SSO login portal
+        console.log('User not authenticated, redirecting to SSO login')
         redirectToSSOLogin()
       } else {
         console.error('SSO auth check failed:', error)
