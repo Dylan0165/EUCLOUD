@@ -14,11 +14,8 @@ class Config:
     # File Upload
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
     THUMBNAIL_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'thumbnails')
-    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB per file
-    ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 
-                         'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', 'mp4', 'mp3', 
-                         'wav', 'avi', 'mov', 'json', 'md', 'py', 'js', 'html', 'css',
-                         'ty'}  # TYPE editor bestanden
+    MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB per file (increased for larger files)
+    ALLOWED_EXTENSIONS = None  # Allow ALL file types (like Nextcloud)
     
     # Storage Quotas (in bytes)
     DEFAULT_STORAGE_QUOTA = 5 * 1024 * 1024 * 1024  # 5GB

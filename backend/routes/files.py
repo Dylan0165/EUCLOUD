@@ -28,10 +28,9 @@ def log_activity(db: Session, user_id: int, activity_type: str, file_id: Optiona
     db.add(activity)
 
 def allowed_file(filename: str) -> bool:
-    if '.' not in filename:
-        return False
-    ext = filename.rsplit('.', 1)[1].lower()
-    return ext in Config.ALLOWED_EXTENSIONS
+    # Allow ALL file types (like Nextcloud)
+    # No restrictions on file extensions
+    return True
 
 def generate_thumbnail(file_path: str, thumbnail_path: str) -> Optional[str]:
     try:
