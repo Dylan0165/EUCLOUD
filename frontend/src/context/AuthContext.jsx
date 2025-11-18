@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react'
-import { authService } from '../services'
+import axios from 'axios'
+import { SSO_CONFIG, buildLoginRedirectUrl } from '../config/sso'
 
 const AuthContext = createContext(null)
 
@@ -20,41 +21,47 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   const checkAuth = async () => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      try {
-        const currentUser = await authService.getCurrentUser()
-        setUser(currentUser)
-      } catch (error) {
-        console.error('Auth check failed:', error)
-        localStorage.removeItem('token')
+    try {
+      // Check SSO session via /auth/me with cookie credentials
+      const response = await axios.get(SSO_CONFIG.AUTH_CHECK_URL, {
+        withCredentials: true,
+        credentials: 'include'
+      })
+      
+      if (response.status === 200 && response.data.user) {
+        setUser(response.data.user)
+      } else {
+        // No valid session, redirect to SSO login portal
+        redirectToSSOLogin()
       }
+    } catch (error) {
+      if (error.response?.status === 401) {
+        // Unauthorized - redirect to SSO login portal
+        redirectToSSOLogin()
+      } else {
+        console.error('SSO auth check failed:', error)
+        // On other errors, also redirect to login for safety
+        redirectToSSOLogin()
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
-  const login = async (email, password) => {
-    const data = await authService.login(email, password)
-    setUser(data.user)
-    return data
+  const redirectToSSOLogin = () => {
+    window.location.href = buildLoginRedirectUrl()
   }
 
-  const register = async (email, password) => {
-    const data = await authService.register(email, password)
-    setUser(data.user)
-    return data
-  }
-
-  const logout = async () => {
-    await authService.logout()
+  const logout = () => {
+    // Logout is handled by EUsuite Login Portal
+    // Just clear local state and redirect
     setUser(null)
+    redirectToSSOLogin()
   }
 
   const value = {
     user,
     loading,
-    login,
-    register,
     logout,
     refreshUser: checkAuth
   }

@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ToastContainer } from 'react-toastify'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import Login from './pages/Login'
-import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import './App.css'
 
@@ -11,10 +9,17 @@ function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
   
   if (loading) {
-    return <div className="loading-screen">Loading...</div>
+    return (
+      <div className="loading-screen">
+        <div className="loading-spinner"></div>
+        <p>Checking authentication...</p>
+      </div>
+    )
   }
   
-  return user ? children : <Navigate to="/login" />
+  // If no user after loading, AuthContext will redirect to SSO login portal
+  // This component will only render if user is authenticated
+  return user ? children : null
 }
 
 function App() {
@@ -23,8 +28,6 @@ function App() {
       <Router>
         <div className="app">
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
             <Route 
               path="/dashboard" 
               element={
@@ -34,6 +37,7 @@ function App() {
               } 
             />
             <Route path="/" element={<Navigate to="/dashboard" />} />
+            {/* No login/register routes - handled by SSO portal */}
           </Routes>
           <ToastContainer 
             position="bottom-right"

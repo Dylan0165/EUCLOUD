@@ -1,38 +1,8 @@
 import api from './api'
 
+// authService is no longer needed for SSO - kept for compatibility but minimal
 export const authService = {
-  // Register new user
-  register: async (email, password) => {
-    const response = await api.post('/auth/register', { email, password })
-    if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token)
-    }
-    return response.data
-  },
-
-  // Login
-  login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password })
-    if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token)
-    }
-    return response.data
-  },
-
-  // Logout
-  logout: async () => {
-    try {
-      await api.post('/auth/logout')
-    } catch (error) {
-      console.error('Logout API call failed:', error)
-    } finally {
-      // Always remove token and redirect, even if API call fails
-      localStorage.removeItem('token')
-      window.location.href = '/login'
-    }
-  },
-
-  // Get current user
+  // Get current user (SSO check)
   getCurrentUser: async () => {
     const response = await api.get('/auth/me')
     return response.data.user
@@ -113,10 +83,9 @@ export const fileService = {
     return response.data
   },
 
-  // Get preview URL
+  // Get preview URL (SSO cookie-based, no token needed)
   getPreviewUrl: (fileId) => {
-    const token = localStorage.getItem('token')
-    return `/api/files/${fileId}/preview?token=${token}`
+    return `/api/files/${fileId}/preview`
   }
 }
 

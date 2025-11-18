@@ -25,9 +25,9 @@ function Header({
   const [folderName, setFolderName] = useState('')
   const [showUserMenu, setShowUserMenu] = useState(false)
 
-  const handleLogout = async () => {
-    await logout()
-    navigate('/login')
+  const handleLogout = () => {
+    // Logout redirects to SSO Login Portal
+    logout()
   }
 
   const toggleDarkMode = () => {
