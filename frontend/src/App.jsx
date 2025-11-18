@@ -12,7 +12,7 @@ function PrivateRoute({ children }) {
     return (
       <div className="loading-screen">
         <div className="loading-spinner"></div>
-        <p>Checking authentication...</p>
+        <p>Verifying SSO authentication...</p>
       </div>
     )
   }
