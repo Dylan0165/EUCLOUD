@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react'
 import axios from 'axios'
 import { SSO_CONFIG, buildLoginRedirectUrl } from '../config/sso'
 
+// SSO Authentication Context - EUsuite Single Sign-On
 const AuthContext = createContext(null)
 
 export const useAuth = () => {
