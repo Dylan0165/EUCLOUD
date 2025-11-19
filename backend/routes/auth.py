@@ -128,6 +128,14 @@ async def login(
     The cookie is automatically sent with all subsequent requests (credentials: "include")
     """
     try:
+        # 🔥 CRITICAL: Delete old cookie IMMEDIATELY - don't validate it!
+        response.delete_cookie(
+            key=COOKIE_NAME,
+            path="/",
+            domain="192.168.124.50"
+        )
+        logger.debug("🗑️ Old SSO cookie deleted at start of login")
+        
         # Get identifier (username or email)
         try:
             identifier = credentials.get_identifier()
@@ -172,15 +180,7 @@ async def login(
         access_token = create_access_token(user.user_id)
         logger.debug(f"✓ JWT token generated for user {user.user_id}")
         
-        # � CRITICAL: Delete old cookie first to prevent stale token issues
-        response.delete_cookie(
-            key=COOKIE_NAME,
-            path="/",
-            domain="192.168.124.50"
-        )
-        logger.debug("🗑️ Old SSO cookie deleted")
-        
-        # �🔐 SET NEW SSO COOKIE
+        # � SET NEW SSO COOKIE
         response.set_cookie(
             key=COOKIE_NAME,
             value=access_token,
