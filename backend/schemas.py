@@ -18,8 +18,14 @@ class UserRegister(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    username: Optional[str] = None  # Accept username for compatibility
+    email: Optional[EmailStr] = None  # Accept email 
     password: str = Field(..., max_length=72)
+    
+    @property
+    def identifier(self):
+        """Return either username or email as the login identifier"""
+        return self.username or self.email
 
 
 class Token(BaseModel):

@@ -118,23 +118,32 @@ async def login(
     The cookie is automatically sent with all subsequent requests (credentials: "include")
     """
     try:
-        logger.info(f"Login attempt for email: {credentials.email}")
+        # Accept both username and email as login identifier
+        identifier = credentials.identifier
+        if not identifier:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Either username or email must be provided"
+            )
         
-        user = db.query(User).filter(User.email == credentials.email).first()
+        logger.info(f"Login attempt for: {identifier}")
+        
+        # Try to find user by email (username and email are the same in our system)
+        user = db.query(User).filter(User.email == identifier).first()
         
         if not user:
-            logger.warning(f"Login failed: User {credentials.email} not found")
+            logger.warning(f"Login failed: User {identifier} not found")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
+                detail="Invalid credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
         if not user.check_password(credentials.password):
-            logger.warning(f"Login failed: Invalid password for {credentials.email}")
+            logger.warning(f"Login failed: Invalid password for {identifier}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
+                detail="Invalid credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
@@ -153,7 +162,7 @@ async def login(
             domain="192.168.124.50"  # Shared across all EUsuite apps on this domain
         )
         
-        logger.info(f"✅ User {credentials.email} logged in successfully - SSO cookie set")
+        logger.info(f"✅ User {user.email} logged in successfully - SSO cookie set")
         
         # Return JSON response (for compatibility, but cookie is what matters)
         return {
