@@ -71,7 +71,14 @@ async def register(
         logger.info(f"Creating access token for user {user.user_id}")
         access_token = create_access_token(user.user_id)
         
-        # 🔐 SET SSO COOKIE (auto-login after registration)
+        # � Delete any old cookie first
+        response.delete_cookie(
+            key=COOKIE_NAME,
+            path="/",
+            domain="192.168.124.50"
+        )
+        
+        # �🔐 SET SSO COOKIE (auto-login after registration)
         response.set_cookie(
             key=COOKIE_NAME,
             value=access_token,
@@ -165,7 +172,15 @@ async def login(
         access_token = create_access_token(user.user_id)
         logger.debug(f"✓ JWT token generated for user {user.user_id}")
         
-        # 🔐 SET SSO COOKIE
+        # � CRITICAL: Delete old cookie first to prevent stale token issues
+        response.delete_cookie(
+            key=COOKIE_NAME,
+            path="/",
+            domain="192.168.124.50"
+        )
+        logger.debug("🗑️ Old SSO cookie deleted")
+        
+        # �🔐 SET NEW SSO COOKIE
         response.set_cookie(
             key=COOKIE_NAME,
             value=access_token,
