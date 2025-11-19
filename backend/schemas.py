@@ -19,13 +19,15 @@ class UserRegister(BaseModel):
 
 class UserLogin(BaseModel):
     username: Optional[str] = None  # Accept username for compatibility
-    email: Optional[EmailStr] = None  # Accept email 
+    email: Optional[str] = None  # Accept email (changed from EmailStr for flexibility)
     password: str = Field(..., max_length=72)
     
-    @property
-    def identifier(self):
+    def get_identifier(self) -> str:
         """Return either username or email as the login identifier"""
-        return self.username or self.email
+        identifier = self.username or self.email
+        if not identifier:
+            raise ValueError("Either username or email must be provided")
+        return identifier.lower().strip()  # Normalize for case-insensitive lookup
 
 
 class Token(BaseModel):

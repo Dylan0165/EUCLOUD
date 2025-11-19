@@ -118,37 +118,49 @@ async def login(
     The cookie is automatically sent with all subsequent requests (credentials: "include")
     """
     try:
-        # Accept both username and email as login identifier
-        identifier = credentials.identifier
-        if not identifier:
+        # Get identifier (username or email)
+        try:
+            identifier = credentials.get_identifier()
+        except ValueError as e:
+            logger.warning(f"Login validation failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Either username or email must be provided"
+                detail=str(e)
             )
         
-        logger.info(f"Login attempt for: {identifier}")
+        logger.info(f"🔐 Login attempt for: {identifier}")
         
-        # Try to find user by email (username and email are the same in our system)
-        user = db.query(User).filter(User.email == identifier).first()
+        # Find user by email (case-insensitive)
+        # In our system, username = email
+        user = db.query(User).filter(
+            User.email.ilike(identifier)  # Case-insensitive search
+        ).first()
         
         if not user:
-            logger.warning(f"Login failed: User {identifier} not found")
+            logger.warning(f"❌ Login failed: User '{identifier}' not found in database")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
-                headers={"WWW-Authenticate": "Bearer"},
+                detail="Invalid username or password"
             )
         
-        if not user.check_password(credentials.password):
-            logger.warning(f"Login failed: Invalid password for {identifier}")
+        logger.info(f"✓ User found: {user.email} (ID: {user.user_id})")
+        
+        # Verify password
+        logger.debug(f"Checking password for user {user.email}")
+        password_valid = user.check_password(credentials.password)
+        
+        if not password_valid:
+            logger.warning(f"❌ Login failed: Invalid password for user '{user.email}'")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
-                headers={"WWW-Authenticate": "Bearer"},
+                detail="Invalid username or password"
             )
+        
+        logger.info(f"✓ Password verified for user {user.email}")
         
         # Generate JWT token
         access_token = create_access_token(user.user_id)
+        logger.debug(f"✓ JWT token generated for user {user.user_id}")
         
         # 🔐 SET SSO COOKIE
         response.set_cookie(
@@ -167,14 +179,15 @@ async def login(
         # Return JSON response (for compatibility, but cookie is what matters)
         return {
             "message": "Login successful",
-            "access_token": access_token,  # Still returned for backwards compatibility
+            "access_token": access_token,
+            "token_type": "bearer",
             "user": user.to_dict()
         }
     
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during login: {str(e)}", exc_info=True)
+        logger.error(f"💥 Unexpected error during login: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}"
@@ -257,3 +270,24 @@ async def test_cookie(request: Request):
             "message": "SSO cookie is NOT present",
             "all_cookies": list(request.cookies.keys())
         }
+
+
+@router.get("/debug/users")
+async def debug_users(db: Session = Depends(get_db)):
+    """
+    DEBUG ONLY: List all users in database
+    ⚠️ REMOVE IN PRODUCTION
+    """
+    users = db.query(User).all()
+    return {
+        "total_users": len(users),
+        "users": [
+            {
+                "user_id": u.user_id,
+                "email": u.email,
+                "has_password": bool(u.password_hash),
+                "created_at": u.created_at.isoformat() if u.created_at else None
+            }
+            for u in users
+        ]
+    }
