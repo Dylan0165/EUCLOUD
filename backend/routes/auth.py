@@ -194,13 +194,14 @@ async def login(
         
         logger.info(f"✅ User {user.email} logged in successfully - SSO cookie set")
         
-        # Return JSON response (for compatibility, but cookie is what matters)
+        # Return JSON response - session is based on COOKIE, not this response
         return {
             "success": True,
-            "message": "Login successful",
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": user.to_dict()
+            "user": {
+                "user_id": user.user_id,
+                "username": user.email,
+                "email": user.email
+            }
         }
     
     except HTTPException:
@@ -214,23 +215,20 @@ async def login(
 
 
 @router.post("/logout")
-async def logout(
-    response: Response,
-    current_user: User = Depends(get_current_user)
-):
+async def logout(response: Response):
     """
     SSO Logout Endpoint
     
     Removes the SSO cookie, effectively logging out the user from ALL EUsuite apps.
     
     Flow:
-    1. Verify user is authenticated (get_current_user)
-    2. Delete the SSO cookie
-    3. Return success message
+    1. Delete the SSO cookie (no authentication required)
+    2. Return success message
     
     After logout, all apps will receive 401 and redirect to login portal.
+    Note: We don't validate who is logging out - just delete the cookie.
     """
-    logger.info(f"User {current_user.email} logging out")
+    logger.info(f"Logout request received")
     
     # 🔓 DELETE SSO COOKIE
     response.delete_cookie(
@@ -239,9 +237,9 @@ async def logout(
         domain="192.168.124.50"
     )
     
-    logger.info(f"✅ User {current_user.email} logged out - SSO cookie deleted")
+    logger.info(f"✅ SSO cookie deleted - user logged out")
     
-    return {"message": "Logout successful"}
+    return {"message": "Logged out"}
 
 
 @router.get("/me")
@@ -262,6 +260,66 @@ async def get_me(current_user: User = Depends(get_current_user)):
     """
     logger.debug(f"SSO check for user {current_user.email}")
     return {"user": current_user.to_dict()}
+
+
+@router.get("/validate")
+async def validate_token(request: Request, db: Session = Depends(get_db)):
+    """
+    SSO Token Validation Endpoint
+    
+    Validates the JWT token from cookie and returns user info if valid.
+    NEVER throws errors - always returns { valid: true/false }
+    
+    This is used by all EUsuite apps to check if user is logged in.
+    
+    Returns:
+        - { valid: true, user: {...} } if token is valid
+        - { valid: false } if token is invalid, expired, or missing
+    """
+    try:
+        # Try to get token from cookie
+        token = request.cookies.get(COOKIE_NAME)
+        
+        if not token:
+            logger.debug("Validate: No token in cookie")
+            return {"valid": False}
+        
+        # Try to decode and validate token
+        from jose import JWTError, jwt
+        from auth import SECRET_KEY, ALGORITHM
+        
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id: int = payload.get("user_id")
+            
+            if user_id is None:
+                logger.debug("Validate: Token missing user_id")
+                return {"valid": False}
+            
+            # Get user from database
+            user = db.query(User).filter(User.user_id == user_id).first()
+            
+            if user is None:
+                logger.debug(f"Validate: User {user_id} not found")
+                return {"valid": False}
+            
+            logger.debug(f"Validate: Token valid for user {user.email}")
+            return {
+                "valid": True,
+                "user": {
+                    "user_id": user.user_id,
+                    "username": user.email,
+                    "email": user.email
+                }
+            }
+            
+        except JWTError as e:
+            logger.debug(f"Validate: JWT error - {str(e)}")
+            return {"valid": False}
+            
+    except Exception as e:
+        logger.debug(f"Validate: Unexpected error - {str(e)}")
+        return {"valid": False}
 
 
 @router.get("/test-cookie")
