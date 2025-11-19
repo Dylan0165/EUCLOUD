@@ -29,21 +29,24 @@ async def register(
     5. Return user info
     """
     try:
-        logger.info(f"Registration attempt for email: {user_data.email}")
+        # Normalize email to lowercase
+        email_normalized = user_data.email.lower().strip()
+        
+        logger.info(f"Registration attempt for email: {email_normalized}")
         logger.debug(f"Password length: {len(user_data.password)} characters")
         
-        existing_user = db.query(User).filter(User.email == user_data.email).first()
+        existing_user = db.query(User).filter(User.email == email_normalized).first()
         if existing_user:
-            logger.warning(f"Registration failed: Email {user_data.email} already exists")
+            logger.warning(f"Registration failed: Email {email_normalized} already exists")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Email already registered"
             )
         
-        logger.info(f"Creating user object for {user_data.email}")
-        user = User(email=user_data.email)
+        logger.info(f"Creating user object for {email_normalized}")
+        user = User(email=email_normalized)
         
-        logger.info(f"Setting password for {user_data.email}")
+        logger.info(f"Setting password for {email_normalized}")
         user.set_password(user_data.password)
         
         try:
@@ -178,6 +181,7 @@ async def login(
         
         # Return JSON response (for compatibility, but cookie is what matters)
         return {
+            "success": True,
             "message": "Login successful",
             "access_token": access_token,
             "token_type": "bearer",

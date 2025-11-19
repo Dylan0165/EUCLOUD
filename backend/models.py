@@ -6,7 +6,8 @@ from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, BigInteger, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 import os
 
 # Database setup
@@ -23,8 +24,8 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Password hashing - using Argon2 (no 72-byte limit, more secure than bcrypt)
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+# Password hashing - Single Argon2 instance for consistency
+ph = PasswordHasher()
 
 
 # Dependency to get database session
@@ -55,11 +56,17 @@ class User(Base):
     
     def set_password(self, password):
         """Hash and set password using Argon2"""
-        self.password_hash = pwd_context.hash(password)
+        self.password_hash = ph.hash(password)
     
     def check_password(self, password):
         """Verify password using Argon2"""
-        return pwd_context.verify(password, self.password_hash)
+        try:
+            ph.verify(self.password_hash, password)
+            return True
+        except VerifyMismatchError:
+            return False
+        except Exception:
+            return False
     
     def to_dict(self):
         """Convert to dictionary"""
@@ -176,13 +183,19 @@ class Share(Base):
     def set_password(self, password):
         """Hash and set password"""
         if password:
-            self.password_hash = pwd_context.hash(password)
+            self.password_hash = ph.hash(password)
     
     def check_password(self, password):
         """Verify password"""
         if not self.password_hash:
             return True
-        return pwd_context.verify(password, self.password_hash)
+        try:
+            ph.verify(self.password_hash, password)
+            return True
+        except VerifyMismatchError:
+            return False
+        except Exception:
+            return False
     
     def is_expired(self):
         """Check if share has expired"""

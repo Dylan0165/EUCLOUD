@@ -157,27 +157,7 @@ function Dashboard() {
           onShowFavorites={() => setFavoritesViewOpen(true)}
         />
         
-        {/* Welcome message for testing PVC persistence */}
-        {!currentFolder && files.length === 0 && !loading && (
-          <div style={{
-            position: 'absolute',
-            top: '150px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            textAlign: 'center',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            padding: '30px 50px',
-            borderRadius: '15px',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-            zIndex: 1000
-          }}>
-            <h2 style={{ margin: '0 0 10px 0', fontSize: '28px' }}>🎉 Welcome to EUCLOUD!</h2>
-            <p style={{ margin: 0, fontSize: '16px', opacity: 0.95 }}>
-              Upload your first file to test persistent storage (PVC) ⬆️
-            </p>
-          </div>
-        )}
+
         
         <FileBrowser
           files={filteredFiles}

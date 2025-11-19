@@ -8,7 +8,6 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel
 import os
 import logging
@@ -26,25 +25,12 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 COOKIE_NAME = "eusuite_token"
 COOKIE_MAX_AGE = 86400  # 24 hours in seconds
 
-# Password hashing - using Argon2 (no 72-byte limit, more secure than bcrypt)
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
-
 # Security scheme (optional for backwards compatibility)
 security = HTTPBearer(auto_error=False)
 
 
 class TokenData(BaseModel):
     user_id: Optional[int] = None
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
 
 
 def create_access_token(user_id: int) -> str:
@@ -131,7 +117,7 @@ def authenticate_user(db, email: str, password: str) -> Optional[User]:
     if not user:
         return None
     
-    if not verify_password(password, user.password_hash):
+    if not user.check_password(password):
         return None
     
     return user
