@@ -280,13 +280,13 @@ async def validate_token(request: Request, db: Session = Depends(get_db)):
     SSO Token Validation Endpoint
     
     Validates the JWT token from cookie and returns user info if valid.
-    NEVER throws errors - always returns { valid: true/false }
+    Returns 401 if token is invalid, expired, or missing.
     
     This is used by all EUsuite apps to check if user is logged in.
     
     Returns:
-        - { valid: true, user: {...} } if token is valid
-        - { valid: false } if token is invalid, expired, or missing
+        - User info if token is valid
+        - 401 Unauthorized if token is invalid, expired, or missing
     """
     try:
         # Try to get token from cookie
@@ -294,7 +294,10 @@ async def validate_token(request: Request, db: Session = Depends(get_db)):
         
         if not token:
             logger.debug("Validate: No token in cookie")
-            return {"valid": False}
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No authentication token provided"
+            )
         
         # Try to decode and validate token
         from jose import JWTError, jwt
@@ -306,32 +309,43 @@ async def validate_token(request: Request, db: Session = Depends(get_db)):
             
             if user_id is None:
                 logger.debug("Validate: Token missing user_id")
-                return {"valid": False}
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token payload"
+                )
             
             # Get user from database
             user = db.query(User).filter(User.user_id == user_id).first()
             
             if user is None:
                 logger.debug(f"Validate: User {user_id} not found")
-                return {"valid": False}
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found"
+                )
             
             logger.debug(f"Validate: Token valid for user {user.email}")
             return {
-                "valid": True,
-                "user": {
-                    "user_id": user.user_id,
-                    "username": user.email,
-                    "email": user.email
-                }
+                "user_id": user.user_id,
+                "username": user.email,
+                "email": user.email
             }
             
         except JWTError as e:
             logger.debug(f"Validate: JWT error - {str(e)}")
-            return {"valid": False}
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
             
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.debug(f"Validate: Unexpected error - {str(e)}")
-        return {"valid": False}
+        logger.error(f"Validate: Unexpected error - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Validation failed"
+        )
 
 
 @router.get("/test-cookie")
