@@ -60,20 +60,23 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://192.168.124.50:30080",  # EuCloud (file browser)
+        "http://192.168.124.50:30090",  # EUsuite Login Portal
+        "http://192.168.124.50:30091",  # EUsuite Login Portal (alt)
+        "http://192.168.124.50:30080",  # EuCloud Dashboard
         "http://192.168.124.50:30081",  # EuType (document editor)
-        "http://192.168.124.50:30090",  # EUsuite Login Portal ⭐ NEW
-        "http://192.168.124.50:30500",  # EuCloud (production port)
+        "http://192.168.124.50:30500",  # Backend API (self)
         "http://192.168.124.50:30600",  # EuType (production port)
         "http://192.168.124.50:30700",  # EuSheets (production port)
         "http://localhost:5173",         # Local development (Vite)
         "http://localhost:3000",         # Local development (React)
         "http://localhost:30080",
-        "http://localhost:30081"
+        "http://localhost:30081",
+        "http://localhost:30090"
     ],
-    allow_credentials=True,  # ⭐ CRITICAL for SSO cookies
-    allow_methods=["*"],     # GET, POST, PUT, DELETE, OPTIONS
-    allow_headers=["*"],     # Content-Type, Authorization, etc.
+    allow_credentials=True,              # ⭐ CRITICAL for SSO cookies
+    allow_methods=["GET", "POST", "OPTIONS"],  # Explicit methods for security
+    allow_headers=["Content-Type", "Authorization"],  # Explicit headers
+    expose_headers=["Set-Cookie"],       # ⭐ Expose Set-Cookie header for credentials
 )
 
 
