@@ -112,22 +112,33 @@ async def register(
 async def login(
     credentials: UserLogin, 
     response: Response,
+    request: Request,
+    redirect: str = None,
     db: Session = Depends(get_db)
 ):
     """
-    SSO Login Endpoint
+    SSO Login Endpoint with Redirect Support
     
     Authenticates user and sets HttpOnly cookie for SSO across all EUsuite apps.
     
+    Query Parameters:
+        redirect: Optional redirect URL after successful login (default: /dashboard)
+    
     Flow:
-    1. Validate credentials
-    2. Generate JWT token
-    3. Set HttpOnly cookie with token
-    4. Return JSON response (for compatibility)
+    1. Extract redirect parameter (default: /dashboard)
+    2. Delete old cookie
+    3. Validate credentials
+    4. Generate JWT token
+    5. Set HttpOnly cookie with token
+    6. Return JSON response with redirect URL
     
     The cookie is automatically sent with all subsequent requests (credentials: "include")
     """
     try:
+        # Extract redirect parameter (default to /dashboard)
+        redirect_url = redirect or "/dashboard"
+        logger.debug(f"🔀 Redirect URL after login: {redirect_url}")
+        
         # 🔥 CRITICAL: Delete old cookie IMMEDIATELY - don't validate it!
         response.delete_cookie(
             key=COOKIE_NAME,
@@ -194,9 +205,10 @@ async def login(
         
         logger.info(f"✅ User {user.email} logged in successfully - SSO cookie set")
         
-        # Return JSON response - session is based on COOKIE, not this response
+        # Return JSON response with redirect - session is based on COOKIE, not this response
         return {
             "success": True,
+            "redirect": redirect_url,
             "user": {
                 "user_id": user.user_id,
                 "username": user.email,
