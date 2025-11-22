@@ -1,6 +1,4 @@
 import React, { createContext, useState, useContext, useEffect } from 'react'
-import axios from 'axios'
-import { SSO_CONFIG, buildLoginRedirectUrl } from '../config/sso'
 
 // SSO Authentication Context - EUsuite Single Sign-On
 const AuthContext = createContext(null)
@@ -18,55 +16,71 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    checkAuth()
+    validateSession()
   }, [])
 
-  const checkAuth = async () => {
+  const validateSession = async () => {
     try {
-      // Check SSO session via /auth/me with cookie credentials
-      const response = await axios.get(SSO_CONFIG.AUTH_CHECK_URL, {
-        withCredentials: true,
+      console.log('🔐 Validating SSO session...')
+      
+      // Call /api/auth/validate with cookie credentials
+      const response = await fetch('http://192.168.124.50:30500/api/auth/validate', {
+        method: 'GET',
         credentials: 'include'
       })
       
-      if (response.status === 200 && response.data.user) {
-        setUser(response.data.user)
-        console.log('SSO authentication successful')
-      } else {
-        // No valid session, redirect to SSO login portal
-        redirectToSSOLogin()
+      if (response.status === 401) {
+        // Not authenticated - redirect to SSO login portal
+        console.log('❌ No valid session, redirecting to login portal')
+        window.location.href = 'http://192.168.124.50:30090/login?redirect=/eucloud'
+        return
+      }
+      
+      if (response.status === 200) {
+        const data = await response.json()
+        if (data.valid && data.user) {
+          setUser(data.user)
+          console.log('✅ SSO authentication successful:', data.user.email)
+        } else {
+          console.log('⚠️ Invalid session data, redirecting to login')
+          window.location.href = 'http://192.168.124.50:30090/login?redirect=/eucloud'
+        }
       }
     } catch (error) {
-      if (error.response?.status === 401) {
-        // Unauthorized - redirect to SSO login portal
-        console.log('User not authenticated, redirecting to SSO login')
-        redirectToSSOLogin()
-      } else {
-        console.error('SSO auth check failed:', error)
-        // On other errors, also redirect to login for safety
-        redirectToSSOLogin()
-      }
+      // Network error or other exception - just log, don't redirect
+      console.error('💥 SSO validation error:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const redirectToSSOLogin = () => {
-    window.location.href = buildLoginRedirectUrl()
-  }
-
-  const logout = () => {
-    // Logout is handled by EUsuite Login Portal
-    // Just clear local state and redirect
-    setUser(null)
-    redirectToSSOLogin()
+  const logout = async () => {
+    try {
+      console.log('🚪 Logging out...')
+      
+      // Call logout endpoint to delete cookie
+      await fetch('http://192.168.124.50:30500/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      })
+      
+      // Clear local state
+      setUser(null)
+      
+      // Redirect to login portal
+      window.location.href = 'http://192.168.124.50:30090/login?redirect=/eucloud'
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Redirect anyway on error
+      window.location.href = 'http://192.168.124.50:30090/login?redirect=/eucloud'
+    }
   }
 
   const value = {
     user,
     loading,
     logout,
-    refreshUser: checkAuth
+    refreshUser: validateSession
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

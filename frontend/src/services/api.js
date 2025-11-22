@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { buildLoginRedirectUrl } from '../config/sso'
 
 // Use relative URL so nginx proxy handles routing to backend
 const API_URL = '/api'
@@ -33,7 +32,8 @@ api.interceptors.response.use(
   (error) => {
     // Handle 401 Unauthorized - redirect to SSO login portal
     if (error.response?.status === 401) {
-      window.location.href = buildLoginRedirectUrl()
+      console.log('🔒 401 Unauthorized - redirecting to SSO login portal')
+      window.location.href = 'http://192.168.124.50:30090/login?redirect=/eucloud'
     }
     
     return Promise.reject(error)

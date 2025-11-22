@@ -385,9 +385,12 @@ async def validate_token(request: Request, db: Session = Depends(get_db)):
             
             logger.debug(f"Validate: Token valid for user {user.email}")
             return {
-                "user_id": user.user_id,
-                "username": user.email,
-                "email": user.email
+                "valid": True,
+                "user": {
+                    "user_id": user.user_id,
+                    "username": user.email,
+                    "email": user.email
+                }
             }
             
         except JWTError as e:
