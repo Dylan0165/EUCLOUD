@@ -1,6 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
 import logging
+from urllib.parse import urlparse
 
 from models import get_db, User
 from schemas import UserRegister, UserLogin, AuthResponse
@@ -10,25 +11,83 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def normalize_redirect(redirect: str | None) -> str:
+    """
+    Normalize redirect URL to safe relative path.
+    
+    Security rules:
+    1. Only allow relative paths (starting with /)
+    2. No absolute URLs (prevent open redirect vulnerabilities)
+    3. Default to /dashboard if invalid or missing
+    
+    Args:
+        redirect: Raw redirect parameter from query string
+        
+    Returns:
+        Safe relative path like /dashboard, /eutype, /cloud
+    """
+    # Default fallback
+    default = "/dashboard"
+    
+    # If empty or None, return default
+    if not redirect or not redirect.strip():
+        logger.debug(f"🔀 Redirect empty, using default: {default}")
+        return default
+    
+    redirect = redirect.strip()
+    
+    # Parse to check for absolute URLs
+    parsed = urlparse(redirect)
+    
+    # If it has a scheme (http://, https://) or netloc (domain), reject it
+    if parsed.scheme or parsed.netloc:
+        logger.warning(f"🚫 Rejected absolute redirect URL: {redirect}, using default: {default}")
+        return default
+    
+    # Must start with /
+    if not redirect.startswith('/'):
+        logger.warning(f"🚫 Rejected non-relative redirect: {redirect}, using default: {default}")
+        return default
+    
+    # Normalize path (remove double slashes, resolve ..)
+    path = parsed.path or redirect
+    
+    # Basic path traversal protection
+    if '..' in path or '//' in path:
+        logger.warning(f"🚫 Rejected unsafe redirect path: {redirect}, using default: {default}")
+        return default
+    
+    logger.debug(f"✓ Normalized redirect: {path}")
+    return path
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserRegister, 
     response: Response,
+    redirect: str = None,
     db: Session = Depends(get_db)
 ):
     """
-    SSO Registration Endpoint
+    SSO Registration Endpoint with Redirect Support
     
     Registers new user and automatically logs them in with SSO cookie.
     
+    Query Parameters:
+        redirect: Optional redirect URL after successful registration (default: /dashboard)
+    
     Flow:
-    1. Validate email is unique
-    2. Create user account
-    3. Generate JWT token
-    4. Set HttpOnly cookie for SSO
-    5. Return user info
+    1. Normalize redirect parameter
+    2. Validate email is unique
+    3. Create user account
+    4. Generate JWT token
+    5. Set HttpOnly cookie for SSO
+    6. Return user info with redirect
     """
     try:
+        # Normalize redirect to safe relative path
+        redirect_url = normalize_redirect(redirect)
+        logger.debug(f"🔀 Redirect URL after registration: {redirect_url}")
         # Normalize email to lowercase
         email_normalized = user_data.email.lower().strip()
         
@@ -93,8 +152,8 @@ async def register(
         logger.info(f"✅ User {user_data.email} registered and logged in - SSO cookie set")
         
         return {
-            "message": "User registered successfully",
-            "access_token": access_token,
+            "success": True,
+            "redirect": redirect_url,
             "user": user.to_dict()
         }
     
@@ -135,8 +194,8 @@ async def login(
     The cookie is automatically sent with all subsequent requests (credentials: "include")
     """
     try:
-        # Extract redirect parameter (default to /dashboard)
-        redirect_url = redirect or "/dashboard"
+        # Normalize redirect to safe relative path
+        redirect_url = normalize_redirect(redirect)
         logger.debug(f"🔀 Redirect URL after login: {redirect_url}")
         
         # 🔥 CRITICAL: Delete old cookie IMMEDIATELY - don't validate it!
