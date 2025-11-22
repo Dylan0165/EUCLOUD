@@ -130,14 +130,7 @@ async def register(
         logger.info(f"Creating access token for user {user.user_id}")
         access_token = create_access_token(user.user_id)
         
-        # � Delete any old cookie first
-        response.delete_cookie(
-            key=COOKIE_NAME,
-            path="/",
-            domain="192.168.124.50"
-        )
-        
-        # �🔐 SET SSO COOKIE (auto-login after registration)
+        # 🔐 SET SSO COOKIE (auto-login after registration)
         response.set_cookie(
             key=COOKIE_NAME,
             value=access_token,
@@ -197,14 +190,6 @@ async def login(
         # Normalize redirect to safe relative path
         redirect_url = normalize_redirect(redirect)
         logger.debug(f"🔀 Redirect URL after login: {redirect_url}")
-        
-        # 🔥 CRITICAL: Delete old cookie IMMEDIATELY - don't validate it!
-        response.delete_cookie(
-            key=COOKIE_NAME,
-            path="/",
-            domain="192.168.124.50"
-        )
-        logger.debug("🗑️ Old SSO cookie deleted at start of login")
         
         # Get identifier (username or email)
         try:
