@@ -178,11 +178,10 @@ async def login(
     
     Flow:
     1. Extract redirect parameter (default: /dashboard)
-    2. Delete old cookie
-    3. Validate credentials
-    4. Generate JWT token
-    5. Set HttpOnly cookie with token
-    6. Return JSON response with redirect URL
+    2. Validate credentials
+    3. Generate JWT token
+    4. Set HttpOnly cookie with token
+    5. Return JSON response with redirect URL
     
     The cookie is automatically sent with all subsequent requests (credentials: "include")
     """
